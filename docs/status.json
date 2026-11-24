@@ -7,6 +7,13 @@
   },
   "inProgress": [
     {
+      "type": "Erweiterung",
+      "kind": "lexikon",
+      "title": "150 zusätzliche Wortkarten fürs Lügen-Lexikon",
+      "detail": "Neue Begriffe aus zehn Themengebieten mit Haus-Lügen und Erklärungen.",
+      "branch": "codex/lexikon-wortschatz"
+    },
+    {
       "type": "liegen geblieben",
       "kind": null,
       "title": "Startseite: Spielerliste statt Leaderboard",

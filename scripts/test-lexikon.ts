@@ -221,15 +221,23 @@ await (async () => {
   t2.g.dispose();
   lexResetAbend();
   const all = new Set<string>();
-  for (let i = 0; i < 120; i++) {
+  const missingChoices: string[] = [];
+  for (let i = 0; i < Math.ceil(LEX_ENTRIES.length / lexRounds(9)); i++) {
     const tt = setup(9);
     while (tt.st().sub !== 'over') {
       if (tt.st().sub === 'write') all.add(tt.st().prompt);
       tt.g.skip();
+      if (tt.st().sub === 'vote') {
+        const options = tt.st().options!;
+        if (options.length !== LEXIKON.MIN_OPTIONS || new Set(options.map(lexKey)).size !== options.length) {
+          missingChoices.push(tt.st().prompt);
+        }
+      }
     }
     tt.g.dispose();
     if (all.size >= LEX_ENTRIES.length) break;
   }
+  eq('Jede Frage bietet auch ohne Spielerlügen sechs verschiedene Antworten', missingChoices, []);
   eq('Alle Einträge kommen dran, bevor sich einer wiederholt', all.size, LEX_ENTRIES.length);
   const picked = lexPick(5);
   eq('Danach geht es von vorn los', picked.length, 5);

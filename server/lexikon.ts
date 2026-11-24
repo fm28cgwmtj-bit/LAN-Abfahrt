@@ -173,13 +173,17 @@ export class LexikonGame implements MiniGame {
     this.ctx.onChange();
   }
 
+  private otherHouseLies() {
+    return LEX_ENTRIES.filter((e) => e.cat === this.entry.cat && e !== this.entry).flatMap((e) => e.lies);
+  }
+
   /** „Lüge vorschlagen“: erst die Haus-Lügen dieses Eintrags, dann welche aus derselben Kategorie */
   private suggestFor(id: string) {
     const cur = this.suggestions.get(id)?.text;
     const taken = new Set([...this.lies.values(), ...[...this.suggestions].filter(([o]) => o !== id).map(([, v]) => v.text)].map(lexKey));
     const ok = (t: string) => t !== cur && !taken.has(lexKey(t)) && !this.tooClose(t);
     let pool = this.entry.lies.filter(ok);
-    if (!pool.length) pool = LEX_ENTRIES.filter((e) => e.cat === this.entry.cat && e !== this.entry).flatMap((e) => e.lies).filter(ok);
+    if (!pool.length) pool = this.otherHouseLies().filter(ok);
     const text = pool[Math.floor(Math.random() * pool.length)] ?? 'Keine Ahnung';
     this.suggestions.set(id, { text, seq: (this.suggestions.get(id)?.seq ?? 0) + 1 });
     this.ctx.onChange();
@@ -203,12 +207,18 @@ export class LexikonGame implements MiniGame {
       else merged.set(key, { text, key, truth: false, house: false, by: [id] });
     }
     const answers: Answer[] = [{ text: this.entry.a, key: lexKey(this.entry.a), truth: true, house: false, by: [] }, ...merged.values()];
-    // Zu wenig Auswahl → Haus-Lügen auffüllen
-    for (const t of shuffle(this.entry.lies)) {
-      if (answers.length >= LEXIKON.MIN_OPTIONS) break;
-      const key = lexKey(t);
-      if (!answers.some((a) => a.key === key)) answers.push({ text: t, key, truth: false, house: true, by: [] });
-    }
+    // Erst die eigenen Haus-Lügen, bei fehlenden oder gleichen Eingaben auch passende aus der Kategorie.
+    const addHouseLies = (pool: string[]) => {
+      for (const text of shuffle(pool)) {
+        if (answers.length >= LEXIKON.MIN_OPTIONS) break;
+        const key = lexKey(text);
+        if (!answers.some((a) => a.key === key) && !this.tooClose(text)) {
+          answers.push({ text, key, truth: false, house: true, by: [] });
+        }
+      }
+    };
+    addHouseLies(this.entry.lies);
+    if (answers.length < LEXIKON.MIN_OPTIONS) addHouseLies(this.otherHouseLies());
     this.answers = shuffle(answers);
     s.options = this.answers.map((a) => a.text);
     s.written = this.ids.filter((id) => this.lies.has(id));
