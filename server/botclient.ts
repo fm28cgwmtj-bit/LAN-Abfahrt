@@ -3,7 +3,7 @@
  * direkt vom Server ("Bot hinzufügen" in der Lobby) benutzt.
  */
 import { io, type Socket } from 'socket.io-client';
-import type { ArenaState, GameLive, GameMeta, GameState, IgelState, IgelWeapon, KurveState, ParcoursState, PrivateState, SmashFighter, SmashState, TttState, TurmLane } from '../shared/types';
+import type { ArenaState, GameLive, GameMeta, GameState, IgelState, IgelWeapon, KurveState, MurderState, ParcoursState, PrivateState, SmashFighter, SmashState, TttState, TurmLane } from '../shared/types';
 import { ARENA, type ArenaCell, DIRS, arenaGeo, blastCells } from '../shared/arena';
 import { BASE_SOLIDS, PARCOURS, PART_DEFS, type Rect, canPlace, overlaps, partRect, snap } from '../shared/parcours';
 import { BAZOOKA, GRENADE, IGEL, IGEL_TAUNTS, PUNCH, type Mask, applyOp, buildTerrain, isTool, ropeAnchor, sameSide, simulateBazooka, surfaceY } from '../shared/igel';
@@ -11,7 +11,7 @@ import { randomLook } from '../shared/avatar';
 import { BOULE, bouleAim, bouleDist, boulePowerFor } from '../shared/boule';
 import type { BouleState } from '../shared/types';
 import { BOTTLE, RANGE, THROW_SPOT, WIND_K } from '../shared/flunky';
-import { ITEM_INFO, KURVE, ROOMS, TTT, TURM, turmCellOffsets, turmSnapX } from '../shared/games';
+import { ITEM_INFO, KURVE, MURDER, ROOMS, TTT, TURM, turmCellOffsets, turmSnapX } from '../shared/games';
 import { type TrailCursor, ingestTrail, walkLine } from '../shared/kurve';
 import { lightSwitch, lineFree, nextWaypoint, roomAt, roomInner } from '../shared/house';
 import { SMASH_STAGES, mainPlatform } from '../shared/smash';
@@ -63,6 +63,8 @@ import { liederBot } from './liederbot';
 import { sektBot } from './sektbot';
 import { bandBot } from './bandbot';
 import { malerBot } from './malerbot';
+import { geheimcodeBot } from './geheimcodebot';
+import { FERIEN_STEPS, ferienStepCorrect } from '../shared/ferienaufgaben';
 
 export interface BotOptions {
   url: string;
@@ -1371,48 +1373,51 @@ export class Bot {
     if (m.kind === 'werwars') werwarsBot(this, m.state, !!me?.isVip);
     if (m.kind === 'maler') malerBot(this, m.state);
 
-    if (m.kind === 'murder') {
-      const ms = m.state;
+    if (m.kind === 'geheimcode') geheimcodeBot(this, m.state);
+    if (m.kind === 'murder') this.playMurder(m.state, s.miniSeq);
+  }
+
+  private playMurder(st: MurderState, seq: number | undefined) {
+    if (st.sub !== 'tasks' && st.sub !== 'vote') return;
+    this.once('murder', async () => {
+      await sleep(st.sub === 'vote' ? rand(1000, 2200) : rand(550, 1050));
+      const game = this.state;
+      if (!this.socket.connected || game?.phase !== 'mini' || game.miniSeq !== seq || game.mini?.kind !== 'murder') return;
+      const live = game.mini.state;
       const p = this.priv?.kind === 'murder' ? this.priv.state : null;
-      if (!p) return;
-      if (ms.sub === 'tasks') {
-        this.once('murder-task', async () => {
-          if (p.killTarget && Math.random() < 0.5) {
-            await sleep(rand(300, 800));
-            this.send('kill');
-            return;
-          }
-          if (p.bodyHere) {
-            await sleep(rand(500, 1500));
-            this.send('report');
-            return;
-          }
-          if (p.room === null || p.doneRooms.includes(p.room) || Math.random() < 0.02) {
-            const open = ROOMS.map((_, i) => i).filter((i) => !p.doneRooms.includes(i));
-            const room = open.length ? open[Math.floor(Math.random() * open.length)] : Math.floor(Math.random() * ROOMS.length);
-            await sleep(rand(400, 1200));
-            this.send('room', { room });
-            return;
-          }
-          await sleep(rand(80, 160));
-          this.send('task');
-        });
+      if (!p || live.phaseNo !== st.phaseNo || live.sub !== st.sub) return;
+      const phaseNo = live.phaseNo;
+      if (live.sub === 'vote') {
+        if (!p.alive || p.myVote) return;
+        const voters = Object.keys(live.alive).filter(id => live.alive[id] && id !== this.id && !p.partners.includes(id));
+        const target = voters.length && Math.random() > 0.3 ? voters[Math.floor(Math.random() * voters.length)] : 'skip';
+        return this.send('vote', { phaseNo, target });
       }
-      if (ms.sub === 'meeting' && this.leader) {
-        this.once(`meet-${ms.phaseNo}`, async () => {
-          await sleep(4000);
-          this.socket.emit('vip:mini', 'skip');
-        });
+      if (p.bodyHere && Math.random() < 0.8) return this.send('report', { phaseNo });
+      if (p.killTarget && Math.random() < 0.35) return this.send('kill', { phaseNo });
+      const outage = live.sabotage;
+      if (outage) {
+        if (!p.alive || (p.role === 'murderer' && Math.random() < 0.75)) return;
+        const open = outage.stations.filter(r => !outage.repaired.includes(r));
+        if (p.room !== null && open.includes(p.room)) return this.send('repair', { phaseNo });
+        if (open.length) this.send('room', { phaseNo, room: open[Math.floor(Math.random() * open.length)] });
+        return;
       }
-      if (ms.sub === 'vote' && p.alive && !p.myVote) {
-        this.once(`vote-${ms.phaseNo}`, async () => {
-          await sleep(rand(800, 2500));
-          const alive = Object.keys(ms.alive).filter((id) => ms.alive[id] && id !== this.id);
-          const target = Math.random() < 0.2 ? 'skip' : alive[Math.floor(Math.random() * alive.length)];
-          this.send('vote', { target });
-        });
+      const elapsed = MURDER.TASKS_MS - live.endsIn;
+      if (p.canSabotage && elapsed > 4500 && Math.random() < 0.12) return this.send('sabotage', { phaseNo });
+      if (p.canEmergency && elapsed > 10_000 && (live.screamSeq || p.doneRooms.length === ROOMS.length) && Math.random() < 0.013) {
+        return this.send('emergency', { phaseNo });
       }
-    }
+      if (p.room === null || p.doneRooms.includes(p.room)) {
+        const open = ROOMS.map((_, i) => i).filter(i => !p.doneRooms.includes(i));
+        if (open.length) this.send('room', { phaseNo, room: open[Math.floor(Math.random() * open.length)] });
+        return;
+      }
+      const room = p.room;
+      const step = Math.floor(p.taskTaps * FERIEN_STEPS / MURDER.TASK_TAPS);
+      const choice = [0, 1, 2].find(i => ferienStepCorrect(room, step, i));
+      if (choice !== undefined) this.send('taskStep', { phaseNo, room, step, choice });
+    });
   }
 
   /** Einfache KI: herumlaufen, Sachen aufheben, Verräter jagen Einzelgänger, Unschuldige wehren sich */

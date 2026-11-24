@@ -1,11 +1,25 @@
 {
-  "updated": "2026-11-24T14:34+00:00",
+  "updated": "2026-11-24T15:16+00:00",
   "artifact": "https://claude.ai/artifact/8XRwB1H3bsUUTV5g9dAtmi (slug 3cefa65c-7b4d-4434-a343-b15cb2c458b5)",
   "analysis": {
     "title": "Spiel-Review (Tiefenanalyse, 5.11.)",
     "url": "https://claude.ai/artifact/76ucbosiWoyLfWBYx2VBK1"
   },
   "inProgress": [
+    {
+      "type": "Spieltest im Fork",
+      "kind": "geheimcode",
+      "title": "Geheimcode am Pool",
+      "detail": "Zwei Teams erraten Wörter aus einem Raster mit 25 Karten. Nur die Hinweisgeber sehen den Lageplan. Das Startteam sucht neun Wörter, das andere acht.",
+      "branch": "codex/spieltest"
+    },
+    {
+      "type": "Spieltest im Fork",
+      "kind": "murder",
+      "title": "Stromausfall und Notruf im Ferienhaus",
+      "detail": "In sechs Räumen warten Aufgaben mit je drei Handgriffen. Bei Sabotage bleiben 20 Sekunden, um den Strom an zwei Stationen wiederherzustellen. Jeder lebende Gast kann einmal eine Versammlung einberufen.",
+      "branch": "codex/spieltest"
+    },
     {
       "type": "Spieltest im Fork",
       "kind": "turm",
@@ -155,7 +169,7 @@
       "title": "Review-Phase 5: weitere neue Spiele",
       "detail": "Von den 12 Review-Vorschlägen sind 8 gemergt (Wer war’s?, Funkfrequenz, Schätzkönig, Mäxchen, Sektkorken, Montagsmaler live, Strand-Band, Lügen-Lexikon). Noch offen:",
       "steps": [
-        "Geheimcode am Pool – Team-Wortspiel, Handy als geheimer Lageplan, à la Codenames (M)",
+        "Geheimcode am Pool – Team-Wortspiel, Handy als geheimer Lageplan, à la Codenames (im Fork spielbar)",
         "Kofferbombe entschärfen – asymmetrisches Koop-Rätsel, à la Keep Talking (M)",
         "Drachenboot – Team-Paddeln mit Sensor, 60–90 s (S–M)",
         "Flohmarkt-Auktion – Bieten mit geheimen Werten, à la Kuhhandel (S–M)",

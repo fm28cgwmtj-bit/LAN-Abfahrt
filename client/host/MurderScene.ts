@@ -7,7 +7,7 @@ import * as O from '../art/objects';
 import { addHouse } from './house';
 import { bus, getState, playerById } from './store';
 import { figure } from './textures';
-import { Countdown, GREEN_INK, RED_INK, ensureTex, ink, nameTag, panel, tagName, txt } from './ui';
+import { Countdown, GREEN_INK, RED_INK, ensureTex, fitText, ink, nameTag, panel, tagName, txt } from './ui';
 import { Juice } from './juice';
 import { sfx } from './sfx';
 
@@ -35,7 +35,7 @@ export class MurderScene extends Phaser.Scene {
     const st = getState();
     this.lastScream = st?.mini?.kind === 'murder' ? st.mini.state.screamSeq : 0;
 
-    addHouse(this);
+    addHouse(this, { labelDepth: 40 });
     // Nacht-Stimmung
     this.night = this.add.rectangle(0, 0, WORLD.W, WORLD.H, 0x0b1030, 0.45).setOrigin(0).setDepth(30);
 
@@ -58,10 +58,11 @@ export class MurderScene extends Phaser.Scene {
   private render(s: GameState) {
     if (s.mini?.kind !== 'murder') return;
     const m = s.mini.state;
-    const key = `${m.sub}-${m.phaseNo}`;
+    const key = `${m.sub}-${m.phaseNo}-${m.sabotage?.endsAt ?? ''}`;
     if (key !== this.renderedKey) {
       this.renderedKey = key;
       this.countdown.set(m.endsIn);
+      if (m.sabotage) sfx('error', { pitch: 0.65 });
       // Phasen-Jingles: Besprechung, Abstimmung, Rauswurf, Ende
       if (m.sub === 'meeting') (sfx('whistle'), sfx(m.deaths.length ? 'ko' : 'drumroll', { delay: 0.3, vol: 0.6 }));
       if (m.sub === 'vote') sfx('select');
@@ -76,12 +77,12 @@ export class MurderScene extends Phaser.Scene {
       this.lastScream = m.screamSeq;
       this.scream();
     }
-    const sKey = JSON.stringify([m.sub, m.phaseNo, m.roomCounts, m.taskProgress, m.voted, m.alive, m.deaths]);
+    const sKey = JSON.stringify([key, m.sabotage?.repaired, m.roomCounts, m.taskProgress, m.voted, m.alive, m.deaths]);
     if (sKey === this.stateKey) return;
     this.stateKey = sKey;
 
     this.layer.removeAll(true);
-    this.night.setAlpha(m.sub === 'tasks' ? 0.45 : 0.75);
+    this.night.setAlpha(m.sub === 'tasks' && !m.sabotage ? 0.45 : 0.75);
     this.renderHud(m);
     switch (m.sub) {
       case 'roles':
@@ -107,6 +108,12 @@ export class MurderScene extends Phaser.Scene {
 
   private renderHud(m: MurderState) {
     this.hud.removeAll(true);
+    if (m.sabotage) {
+      this.hud.add(ink(this, 12, 13, 'STROMAUSFALL', { origin: [0, 0], color: RED_INK }));
+      this.hud.add(ink(this, 152, 13, `Repariert ${m.sabotage.repaired.length}/2`, { origin: [0, 0] }));
+      this.hud.add(ink(this, 350, 13, 'Restzeit', { origin: [0, 0] }));
+      return;
+    }
     this.hud.add(ink(this, 12, 13, 'Aufgaben', { origin: [0, 0], color: GREEN_INK }));
     const g = this.add.graphics();
     g.fillStyle(0x2d1b12).fillRect(91, 12, 202, 10);
@@ -119,6 +126,12 @@ export class MurderScene extends Phaser.Scene {
   private renderMap(m: MurderState) {
     ROOMS.forEach((_, i) => {
       const r = roomRect(i);
+      if (m.sabotage?.stations.includes(i)) {
+        const fixed = m.sabotage.repaired.includes(i);
+        const x = r.x + r.w / 2;
+        this.layer.add(panel(this, x - 56, r.y + 24, 112, 23));
+        this.layer.add(ink(this, x, r.y + 31, fixed ? 'Repariert' : 'Reparieren!', { color: fixed ? GREEN_INK : RED_INK }));
+      }
       const n = m.roomCounts[i] ?? 0;
       for (let k = 0; k < n; k++) {
         const sx = r.x + r.w / 2 + (k - (n - 1) / 2) * Math.min(16, (r.w - 20) / n);
@@ -131,13 +144,16 @@ export class MurderScene extends Phaser.Scene {
   private card(title: string, sub: string, h = 120) {
     const y = 140 - h / 2;
     this.layer.add(panel(this, 70, y, 340, h));
-    this.layer.add(ink(this, WORLD.W / 2, y + 16, title, { size: 16, color: RED_INK, wrap: 310 }));
+    this.layer.add(fitText(ink(this, WORLD.W / 2, y + 16, title, { size: 16, color: RED_INK }), 310));
     if (sub) this.layer.add(ink(this, WORLD.W / 2, y + 44, sub, { wrap: 310 }));
   }
 
   private renderMeeting(m: MurderState) {
-    const reporter = playerById(m.reporter)?.name;
-    this.card('Besprechung!', reporter ? `${reporter} hat eine Leiche gefunden!` : 'Die Zeit ist um – alle ins Wohnzimmer!', 190);
+    const reporter = playerById(m.reporter)?.name ?? '?';
+    const emergency = m.meetingReason === 'emergency';
+    const cause = emergency ? `${reporter} ruft alle ins Wohnzimmer.`
+      : m.meetingReason === 'body' ? `${reporter} hat eine Leiche gemeldet.` : 'Die Zeit für die Aufgaben ist um.';
+    this.card(emergency ? 'Notfallsitzung!' : 'Besprechung!', cause, 190);
     if (m.deaths.length) {
       this.layer.add(ink(this, WORLD.W / 2, 112, 'Gefunden:', { color: RED_INK }));
       m.deaths.forEach((id, i) => {
@@ -151,7 +167,7 @@ export class MurderScene extends Phaser.Scene {
         this.layer.add(nameTag(this, x, 176, p.name));
       });
     } else {
-      this.layer.add(ink(this, WORLD.W / 2, 140, 'Niemand ist gestorben ... noch.'));
+      this.layer.add(ink(this, WORLD.W / 2, 140, 'Keine neuen Todesfälle.'));
     }
     this.layer.add(ink(this, WORLD.W / 2, 204, 'Diskutiert! Wer war wo?\n(VIP kann zur Abstimmung springen)', { color: '#7a5a3a', wrap: 310 }));
   }

@@ -45,6 +45,7 @@ import { pickSuess } from './screens/suess';
 import { pickUmzug } from './screens/umzug';
 import { pickWackel } from './screens/wackel';
 import { pickSchaetz } from './screens/schaetz';
+import { pickGeheimcode } from './screens/geheimcode';
 import { pickLexikon } from './screens/lexikon';
 import { pickLieder } from './screens/lieder';
 import { pickMaexchen } from './screens/maexchen';
@@ -204,6 +205,11 @@ function onState(s: GameState) {
 /** Countdown nur neu setzen, wenn sich die Spielphase ändert (oder eine neue Instanz startet: Aufwärmrunde → Spiel) */
 function timerKey(s: GameState | null) {
   if (!s?.mini) return '';
+  if (s.mini.kind === 'murder') {
+    const m = s.mini.state;
+    return `murder-${s.miniSeq}-${m.phaseNo}-${m.sub}-${m.sabotage?.endsAt ?? ''}`;
+  }
+  if (s.mini.kind === 'geheimcode') return `geheimcode-${s.miniSeq}-${s.mini.state.sub}-${s.mini.state.turn}`;
   const st = s.mini.state as unknown as Record<string, unknown>;
   return `${s.miniSeq ?? 0}-${s.mini.kind}-${st.sub}-${st.round ?? ''}-${st.phaseNo ?? ''}`;
 }
@@ -420,6 +426,8 @@ function pickMini(m: MiniSnapshot, vip: boolean): Screen {
       return pickKugel(m.state);
     case 'schaetz':
       return pickSchaetz(m.state, vip);
+    case 'geheimcode':
+      return pickGeheimcode(m.state);
     case 'lexikon':
       return pickLexikon(m.state, vip);
     case 'lieder':

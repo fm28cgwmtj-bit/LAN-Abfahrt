@@ -1,4 +1,5 @@
 import type { MiniSnapshot, MurderPrivate, MurderState, PrivateState, SkipInfo } from '../shared/types';
+import { FERIEN_STEPS, ferienStepCorrect } from '../shared/ferienaufgaben';
 import { MURDER, ROOMS } from '../shared/games';
 import { type MiniCtx, type MiniGame, Timers, asRecord, endsIn, phaseTimer, shuffle, waitLabel } from './minigame';
 
@@ -26,6 +27,9 @@ export class MurderGame implements MiniGame {
   private done = new Map<string, Set<number>>();
   private killedThisPhase = new Set<string>();
   private bodies: Body[] = [];
+  private emergencyUsed = new Set<string>();
+  private sabotageUsed = false;
+  private tasksLeft = 0;
   private votes = new Map<string, string>();
   private deadline = 0;
   private timers = new Timers();
@@ -46,6 +50,8 @@ export class MurderGame implements MiniGame {
       taskProgress: 0,
       taskTarget: urlauber * MURDER.TASKS_PER_PLAYER,
       deaths: [],
+      sabotage: null,
+      meetingReason: null,
       reporter: null,
       voted: [],
       voteTally: null,
@@ -61,6 +67,11 @@ export class MurderGame implements MiniGame {
   }
 
   snapshot(): MiniSnapshot {
+    const alive = { ...this.state.alive };
+    if (this.state.sub === 'tasks') {
+      // Ein Schrei verrät keinen Namen. Erst in der Besprechung wird das Opfer öffentlich.
+      for (const body of this.bodies) if (!body.announced) alive[body.victim] = true;
+    }
     const counts = ROOMS.map(() => 0);
     for (const id of this.ids) {
       const r = this.room.get(id);
@@ -68,7 +79,7 @@ export class MurderGame implements MiniGame {
     }
     return {
       kind: 'murder',
-      state: { ...this.state, roomCounts: counts, endsIn: endsIn(this.deadline) },
+      state: { ...this.state, alive, roomCounts: counts, endsIn: endsIn(this.deadline) },
     };
   }
 
@@ -86,31 +97,48 @@ export class MurderGame implements MiniGame {
       doneRooms: [...(this.done.get(id) ?? [])],
       killTarget: s.sub === 'tasks' ? this.killTargetFor(id) : null,
       bodyHere: s.sub === 'tasks' && s.alive[id] && r !== null && this.bodies.some((b) => !b.found && b.room === r),
+      canSabotage: this.canSabotage(id),
+      canEmergency: this.canEmergency(id),
       myVote: this.votes.get(id) ?? null,
     };
     return { kind: 'murder', state: priv };
   }
 
   input(id: string, action: string, payload: unknown) {
-    if (!this.ids.includes(id)) return;
+    if (!this.ids.includes(id) || !this.ctx.isConnected(id)) return;
     const s = this.state;
     const p = asRecord(payload);
 
+    if (p.phaseNo !== undefined && p.phaseNo !== s.phaseNo) return;
     if (s.sub === 'tasks') {
-      if (action === 'room') {
+      // Auch bei verzögerten Timer-Callbacks entscheidet die Serverfrist über die letzte Eingabe.
+      if (Date.now() >= this.deadline) {
+        if (s.sabotage) this.blackoutExpired();
+        else this.meeting(null, 'timeout');
+        return;
+      }
+      if (action === 'sabotage') {
+        if (this.canSabotage(id)) this.startBlackout();
+      } else if (action === 'repair') {
+        this.repair(id);
+      } else if (action === 'emergency') {
+        if (!this.canEmergency(id)) return;
+        this.emergencyUsed.add(id);
+        this.meeting(id, 'emergency');
+      } else if (action === 'room') {
         const r = Number(p.room);
-        if (!Number.isInteger(r) || r < 0 || r >= ROOMS.length) return;
+        if (!Number.isInteger(r) || r < 0 || r >= ROOMS.length || this.room.get(id) === r) return;
         this.room.set(id, r);
         this.taps.set(id, 0);
         this.ctx.onChange();
-      } else if (action === 'task') {
-        this.task(id);
+      } else if (action === 'task' || action === 'taskStep') {
+        if (!s.sabotage) this.task(id, action === 'taskStep' ? p : undefined);
       } else if (action === 'kill') {
         this.kill(id);
       } else if (action === 'report') {
         const r = this.room.get(id);
         const body = this.bodies.find((b) => !b.found && b.room === r);
-        if (s.alive[id] && body) this.meeting(id);
+        if (s.alive[id] && body) this.meeting(id, 'body');
       }
     } else if (s.sub === 'vote' && action === 'vote') {
       if (!s.alive[id]) return;
@@ -149,6 +177,7 @@ export class MurderGame implements MiniGame {
   }
 
   skip() {
+    if (!this.skippable()) return;
     const s = this.state;
     this.timers.clear();
     if (s.sub === 'roles') this.startTasks();
@@ -161,7 +190,7 @@ export class MurderGame implements MiniGame {
     // Spieler bleiben im Spiel – beim Wiederverbinden geht es weiter.
     // Läuft gerade eine Abstimmung, nicht auf Abwesende warten.
     const s = this.state;
-    if (s.sub !== 'vote' || !this.votes.size) return;
+    if (s.sub !== 'vote') return;
     const voters = this.ids.filter((v) => s.alive[v] && this.ctx.isConnected(v));
     if (voters.every((v) => this.votes.has(v))) {
       this.timers.clear();
@@ -181,6 +210,10 @@ export class MurderGame implements MiniGame {
     s.phaseNo += 1;
     s.deaths = [];
     s.reporter = null;
+    s.meetingReason = null;
+    s.voted = [];
+    this.votes.clear();
+    this.sabotageUsed = false;
     s.voteTally = null;
     s.ejected = null;
     s.ejectedWasMurderer = null;
@@ -190,16 +223,66 @@ export class MurderGame implements MiniGame {
       this.taps.set(id, 0);
       this.done.set(id, new Set());
     }
-    this.setDeadline(MURDER.TASKS_MS);
-    this.timers.later(MURDER.TASKS_MS, () => this.meeting(null));
+    this.runTaskClock(MURDER.TASKS_MS);
     this.ctx.onChange();
   }
 
-  private task(id: string) {
+  private runTaskClock(ms: number) {
+    this.deadline = phaseTimer(this.timers, ms, () => this.meeting(null, 'timeout'));
+  }
+
+  private canEmergency(id: string) {
+    const s = this.state;
+    return s.sub === 'tasks' && s.alive[id] && !s.sabotage && !this.emergencyUsed.has(id);
+  }
+
+  private canSabotage(id: string) {
+    const s = this.state;
+    return s.sub === 'tasks' && s.alive[id] && !this.sabotageUsed && this.murderers.includes(id);
+  }
+
+  private startBlackout() {
+    this.sabotageUsed = true;
+    this.tasksLeft = endsIn(this.deadline);
+    this.timers.clear();
+    const [first, second] = shuffle(ROOMS.map((_, i) => i));
+    this.deadline = phaseTimer(this.timers, MURDER.SABOTAGE_MS, () => this.blackoutExpired());
+    this.state.sabotage = { stations: [first, second], repaired: [], endsAt: this.deadline };
+    this.ctx.onChange();
+  }
+
+  private blackoutExpired() {
+    this.end('murderer', 'Der Strom ist ausgefallen – die Reparatur kam zu spät!');
+  }
+
+  private repair(id: string) {
+    const s = this.state;
+    const outage = s.sabotage;
+    const room = this.room.get(id);
+    if (!outage || !s.alive[id] || room == null || !outage.stations.includes(room) || outage.repaired.includes(room)) return;
+    const repaired = [...outage.repaired, room];
+    if (repaired.length === outage.stations.length) {
+      this.timers.clear();
+      s.sabotage = null;
+      this.runTaskClock(this.tasksLeft);
+    } else {
+      s.sabotage = { ...outage, repaired };
+    }
+    this.ctx.onChange();
+  }
+
+  private task(id: string, answer?: Record<string, unknown>) {
     const r = this.room.get(id);
     const done = this.done.get(id)!;
     if (r === null || r === undefined || done.has(r)) return;
-    const taps = (this.taps.get(id) ?? 0) + 1;
+    const previous = this.taps.get(id) ?? 0;
+    let taps = previous + 1; // Ältere Handys schicken weiterhin einzelne Tipps.
+    if (answer) {
+      const tapsPerStep = MURDER.TASK_TAPS / FERIEN_STEPS;
+      const step = Math.floor(previous / tapsPerStep);
+      if (answer.phaseNo !== this.state.phaseNo || answer.room !== r || answer.step !== step || !ferienStepCorrect(r, step, answer.choice)) return;
+      taps = (step + 1) * tapsPerStep;
+    }
     if (taps < MURDER.TASK_TAPS) {
       this.taps.set(id, taps);
     } else {
@@ -237,10 +320,12 @@ export class MurderGame implements MiniGame {
     if (!this.checkWin()) this.ctx.onChange();
   }
 
-  private meeting(reporter: string | null) {
+  private meeting(reporter: string | null, reason: NonNullable<MurderState['meetingReason']>) {
     const s = this.state;
     this.timers.clear();
     s.sub = 'meeting';
+    s.sabotage = null;
+    s.meetingReason = reason;
     s.reporter = reporter;
     s.deaths = [];
     for (const b of this.bodies) {
@@ -259,6 +344,7 @@ export class MurderGame implements MiniGame {
     s.sub = 'vote';
     s.voted = [];
     this.votes.clear();
+    if (!this.ids.some((id) => s.alive[id] && this.ctx.isConnected(id))) return this.tallyVotes();
     this.deadline = phaseTimer(this.timers, MURDER.VOTE_MS, () => this.tallyVotes());
     this.ctx.onChange();
   }
@@ -300,6 +386,8 @@ export class MurderGame implements MiniGame {
     const s = this.state;
     this.timers.clear();
     s.sub = 'over';
+    s.sabotage = null;
+    s.meetingReason = null;
     s.winner = winner;
     s.winReason = reason;
     s.murderers = [...this.murderers];

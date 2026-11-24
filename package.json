@@ -27,7 +27,9 @@
     "test:wolfrunde": "tsx scripts/test-wolfrunde.ts",
     "test:band": "tsx scripts/test-band.ts",
     "test:maler": "tsx scripts/test-maler.ts",
-    "test:lexikon": "tsx scripts/test-lexikon.ts"
+    "test:lexikon": "tsx scripts/test-lexikon.ts",
+    "test:murder": "tsx scripts/test-murder.ts",
+    "test:geheimcode": "tsx scripts/test-geheimcode.ts"
   },
   "dependencies": {
     "@fontsource/press-start-2p": "^5.3.0",

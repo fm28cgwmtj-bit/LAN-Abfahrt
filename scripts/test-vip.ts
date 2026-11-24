@@ -96,6 +96,15 @@ test('Laptop übergibt den VIP in der Lobby, im Spiel und bei einem Verbindungsa
   const after = (await view(tv)).state;
   assert.equal(after.phase, 'mini');
   assert.equal(after.miniSeq, game.miniSeq);
+  // Zwei Tabs desselben Handys: Nur der zuletzt beigetretene darf noch abstimmen.
+  const benNeu = client();
+  await join(benNeu, 'Ben', benId);
+  for (const [tab, accepted] of [[ben, false], [benNeu, true]] as const) {
+    await action(tab, 'mini:input', { action: 'vote', payload: { target: adaId } });
+    const mini = (await view(tv)).state.mini;
+    assert.ok(mini?.kind === 'wwe');
+    assert.equal(mini.state.voted.includes(benId), accepted);
+  }
   await action(ada, 'vip:lobby');
   assert.equal((await view(tv)).state.phase, 'lobby');
 

@@ -1,6 +1,7 @@
 import type { MurderPrivate, MurderState } from '../../../shared/types';
 import { MURDER, ROOMS } from '../../../shared/games';
-import { type Screen, app, el, escapeHtml, message, nameOf, playerButtons, q, send, socket, store, tapButton, timerText } from '../core';
+import { FERIEN_STEPS, ferienAufgabe, ferienStepCorrect } from '../../../shared/ferienaufgaben';
+import { type Screen, app, el, escapeHtml, message, nameOf, playerButtons, q, send, socket, store, timerText } from '../core';
 
 const murder = () => (store.state?.mini?.kind === 'murder' ? store.state.mini.state : null);
 const priv = (): MurderPrivate | null => (store.priv?.kind === 'murder' ? store.priv.state : null);
@@ -55,8 +56,9 @@ function buildRoles() {
     <p>Halte den Knopf gedrückt, damit niemand mitliest.</p>
     <div class="slot center"></div>
     <div class="panel">
-      <p class="label-left">Urlauber: Erledigt Aufgaben in den Räumen. Findet ihr eine Leiche, meldet sie!</p>
-      <p class="label-left">Mörder: Bist du mit genau einer Person allein im Raum, kannst du zuschlagen.</p>
+      <p class="label-left">Urlauber erledigen Aufgaben. Fällt der Strom aus, repariert beide Stationen, bevor die Zeit abläuft.</p>
+      <p class="label-left">Mörder können zuschlagen, wenn sie mit ihrem Opfer allein sind. Ihr Team kann einmal pro Tag den Strom abschalten.</p>
+      <p class="label-left">Melde eine Leiche oder rufe einmal pro Partie eine Notfallsitzung ein.</p>
       <p class="label-left">Tote reden nicht!</p>
     </div>
   `);
@@ -66,19 +68,31 @@ function buildRoles() {
 }
 
 function buildTasks() {
+  const phaseNo = murder()!.phaseNo;
+  const isMurderer = priv()!.role === 'murderer';
   const root = el(`
     <div class="top-row"><span class="timer"></span><span class="status"></span></div>
     <div class="dead-banner hidden">Du bist tot! Psst – nicht verraten. Als Geist kannst du weiter Aufgaben machen.</div>
+    <div class="panel outage hidden">
+      <h2>Stromausfall!</h2>
+      <p class="repair-goal"></p>
+      <div class="stations"><p></p><p></p></div>
+    </div>
     <div class="rooms"></div>
+    <button class="hidden repair-btn">Station reparieren</button>
     <div class="panel task-panel">
       <p class="task-text"></p>
-      <button class="big-btn task">TIPPEN</button>
+      <h2 class="task-question"></h2>
+      <div class="center task-choices"></div>
+      <p class="task-feedback" role="status"></p>
     </div>
-    <button class="danger hidden kill-btn"></button>
+    ${isMurderer ? '<button class="danger hidden kill-btn"></button><button class="danger hidden sabotage-btn">Strom sabotieren</button>' : ''}
     <button class="report hidden report-btn">LEICHE MELDEN!</button>
+    <button class="secondary hidden emergency-btn">Notfallsitzung einrufen</button>
     <div class="slot"></div>
   `);
   const roomsEl = q(root, '.rooms');
+  const stationRows = root.querySelectorAll('.stations p');
   const roomBtns = ROOMS.map((r, i) => {
     const b = document.createElement('button');
     b.className = 'room-btn';
@@ -90,16 +104,18 @@ function buildTasks() {
     roomsEl.append(b);
     return b;
   });
-  const taskBtn = q<HTMLButtonElement>(root, '.big-btn');
-  tapButton(taskBtn, () => {
-    send('task');
-    navigator.vibrate?.(5);
-  });
-  const killBtn = q<HTMLButtonElement>(root, '.kill-btn');
-  killBtn.addEventListener('click', () => {
+  const updateTask = roomTask(q(root, '.task-panel'), phaseNo);
+  const killBtn = root.querySelector<HTMLButtonElement>('.kill-btn');
+  killBtn?.addEventListener('click', () => {
     send('kill');
     navigator.vibrate?.([100, 50, 100]);
   });
+  const sabotageBtn = root.querySelector<HTMLButtonElement>('.sabotage-btn');
+  sabotageBtn?.addEventListener('click', () => send('sabotage', { phaseNo }));
+  const emergencyBtn = q<HTMLButtonElement>(root, '.emergency-btn');
+  emergencyBtn.addEventListener('click', () => send('emergency', { phaseNo }));
+  const repairBtn = q<HTMLButtonElement>(root, '.repair-btn');
+  repairBtn.addEventListener('click', () => send('repair', { phaseNo }));
   q(root, '.report-btn').addEventListener('click', () => send('report'));
   roleHold(q(root, '.slot'));
   app.append(root);
@@ -108,43 +124,92 @@ function buildTasks() {
     const p = priv();
     const m = murder();
     if (!p || !m) return;
-    q(root, '.timer').textContent = timerText();
+    const outage = m.sabotage;
+    q(root, '.timer').textContent = timerText(sec => outage ? `Reparatur: ${sec}s` : `${sec}s`);
     q(root, '.status').textContent = `Aufgaben ${Math.round((m.taskProgress / Math.max(1, m.taskTarget)) * 100)}%`;
     q(root, '.dead-banner').classList.toggle('hidden', p.alive);
+    q(root, '.outage').classList.toggle('hidden', !outage);
+    updateTask(p, !!outage);
+    if (outage) {
+      q(root, '.repair-goal').textContent = p.alive ? 'Geh in einen Raum mit offener Station und repariere sie.' : 'Nur Lebende können den Strom wiederherstellen.';
+      outage.stations.forEach((room, i) => {
+        stationRows[i].textContent = `${ROOMS[room].name} · ${outage.repaired.includes(room) ? 'repariert' : 'offen'}`;
+      });
+    }
+    const canRepair = p.alive && p.room !== null && outage?.stations.includes(p.room) && !outage.repaired.includes(p.room);
+    repairBtn.classList.toggle('hidden', !canRepair);
+    sabotageBtn?.classList.toggle('hidden', !p.canSabotage);
+    emergencyBtn.classList.toggle('hidden', !p.canEmergency);
     roomBtns.forEach((b, i) => {
       b.classList.toggle('active', p.room === i);
-      b.classList.toggle('done', p.doneRooms.includes(i));
+      b.setAttribute('aria-pressed', String(p.room === i));
+      b.classList.toggle('done', !outage && p.doneRooms.includes(i));
+      const marker = outage && outage.stations.includes(i) ? (outage.repaired.includes(i) ? ' ✓' : ' ⚡') : '';
+      b.textContent = ROOMS[i].name + marker;
     });
-    const taskText = q(root, '.task-text');
-    if (p.room === null) {
-      taskText.textContent = 'Wähle einen Raum!';
-      taskBtn.disabled = true;
-      taskBtn.textContent = '---';
-    } else if (p.doneRooms.includes(p.room)) {
-      taskText.textContent = `${ROOMS[p.room].name}: erledigt! Geh in einen anderen Raum.`;
-      taskBtn.disabled = true;
-      taskBtn.textContent = 'FERTIG';
-    } else {
-      taskText.textContent = `${ROOMS[p.room].name}: ${ROOMS[p.room].task}`;
-      taskBtn.disabled = false;
-      taskBtn.textContent = `TIPPEN ${p.taskTaps}/${MURDER.TASK_TAPS}`;
+    if (killBtn) {
+      killBtn.classList.toggle('hidden', !p.alive || !p.killTarget);
+      if (p.killTarget) killBtn.textContent = `AUSSCHALTEN: ${nameOf(p.killTarget)}`;
     }
-    killBtn.classList.toggle('hidden', !p.killTarget);
-    if (p.killTarget) killBtn.textContent = `AUSSCHALTEN: ${nameOf(p.killTarget)}`;
     q(root, '.report-btn').classList.toggle('hidden', !p.bodyHere);
+  };
+}
+
+function roomTask(panel: HTMLElement, phaseNo: number) {
+  const title = q(panel, '.task-text');
+  const question = q(panel, '.task-question');
+  const choices = q(panel, '.task-choices');
+  const feedback = q(panel, '.task-feedback');
+  let lastKey = '';
+  return (p: MurderPrivate, paused: boolean) => {
+    const room = p.room;
+    const done = room !== null && p.doneRooms.includes(room);
+    const step = Math.floor(p.taskTaps / (MURDER.TASK_TAPS / FERIEN_STEPS));
+    const key = `${room}/${step}/${done}/${paused}`;
+    if (key === lastKey) return;
+    lastKey = key;
+    choices.replaceChildren();
+    feedback.textContent = '';
+    question.textContent = '';
+    panel.classList.toggle('hidden', paused);
+    if (paused) return;
+    if (room === null || done) {
+      title.textContent = room === null ? 'Wähle einen Raum für deine Aufgabe.' : `${ROOMS[room].name} ist erledigt. Wähle einen anderen Raum.`;
+      return;
+    }
+    const task = ferienAufgabe(room, step);
+    title.textContent = `${ROOMS[room].name} · Schritt ${step + 1}/${FERIEN_STEPS}`;
+    question.textContent = task.frage;
+    task.optionen.forEach((label, choice) => {
+      const button = document.createElement('button');
+      button.className = 'secondary';
+      button.textContent = label;
+      button.addEventListener('click', () => {
+        if (!ferienStepCorrect(room, step, choice)) {
+          feedback.textContent = 'Das passt noch nicht. Versuch es noch einmal.';
+          return;
+        }
+        choices.querySelectorAll('button').forEach(b => { b.disabled = true; });
+        send('taskStep', { phaseNo, room, step, choice });
+        navigator.vibrate?.(10);
+      });
+      choices.append(button);
+    });
   };
 }
 
 function buildMeeting(vip: boolean) {
   const m = murder()!;
-  const reporter = m.reporter ? `${escapeHtml(nameOf(m.reporter))} hat eine Leiche gefunden!` : 'Die Zeit ist um!';
-  const deaths = m.deaths.length ? `Tot: ${escapeHtml(m.deaths.map(nameOf).join(', '))}` : 'Niemand ist gestorben.';
+  const reporter = escapeHtml(nameOf(m.reporter));
+  const reason = m.meetingReason === 'emergency' ? `${reporter} hat die Notfallsitzung einberufen.`
+    : m.meetingReason === 'body' ? `${reporter} hat eine Leiche gemeldet.` : 'Die Zeit für die Aufgaben ist um.';
+  const deaths = m.deaths.length ? `Tot: ${escapeHtml(m.deaths.map(nameOf).join(', '))}` : 'Keine neuen Todesfälle.';
   const root = el(`
     <div class="center">
-      <h1>BESPRECHUNG</h1>
-      <h2>${reporter}</h2>
+      <h1>${m.meetingReason === 'emergency' ? 'NOTFALLSITZUNG' : 'BESPRECHUNG'}</h1>
+      <h2>${reason}</h2>
       <p>${deaths}</p>
-      <p>Diskutiert am Tisch: Wer war wo? Wer lügt?</p>
+      <p>${priv()?.alive ? 'Diskutiert am Tisch: Wer war wo? Wer lügt?' : 'Du bist ein Geist. Hör zu und behalte deinen Verdacht für dich.'}</p>
       <p class="timer"></p>
     </div>
   `);

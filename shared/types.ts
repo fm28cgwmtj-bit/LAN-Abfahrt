@@ -6,6 +6,7 @@ import type { DartsState } from './darts';
 import type { AfbState } from './autoball';
 import type { WolfPrivate, WolfState } from './werwolf';
 import type { WrPrivate, WrState } from './wolfrunde';
+import type { GeheimcodePrivate, GeheimcodeState } from './geheimcode';
 import type { LexPrivate, LexState } from './lexikon';
 import type { KingsState } from './kingscup';
 import type { WpistoleState } from './wpistole';
@@ -103,6 +104,7 @@ export type MiniKind =
   | 'maexchen'
   | 'werwars'
   | 'lexikon'
+  | 'geheimcode'
   | 'skisprung'
   | 'teppich'
   | 'kugel'
@@ -229,6 +231,9 @@ export interface MurderState {
   roomCounts: number[];
   taskProgress: number;
   taskTarget: number;
+  /** Zwei verschiedene Räume; der öffentliche Stand enthält keine Spieler-IDs. */
+  sabotage: { stations: [number, number]; repaired: number[]; endsAt: number } | null;
+  meetingReason: 'body' | 'emergency' | 'timeout' | null;
   /** Tote, die in dieser Besprechung bekannt gegeben werden */
   deaths: string[];
   reporter: string | null;
@@ -254,6 +259,8 @@ export interface MurderPrivate {
   doneRooms: number[];
   killTarget: string | null;
   bodyHere: boolean;
+  canSabotage: boolean;
+  canEmergency: boolean;
   myVote: string | null;
 }
 
@@ -2318,6 +2325,7 @@ export type MiniSnapshot =
   | { kind: 'lieder'; state: LiederState }
   | { kind: 'maexchen'; state: MaexState }
   | { kind: 'werwars'; state: WerwarsState }
+  | { kind: 'geheimcode'; state: GeheimcodeState }
   | { kind: 'lexikon'; state: LexState }
   | { kind: 'skisprung'; state: SkiState }
   | { kind: 'teppich'; state: TepState }
@@ -2508,6 +2516,7 @@ export type PrivateState =
   | { kind: 'maexchen'; state: MaexPrivate }
   | { kind: 'werwars'; state: WerwarsPrivate }
   | { kind: 'maler'; state: MalerPrivate }
+  | { kind: 'geheimcode'; state: GeheimcodePrivate }
   | { kind: 'lexikon'; state: LexPrivate }
   | { kind: 'board'; state: BoardPrivate }
   | null;

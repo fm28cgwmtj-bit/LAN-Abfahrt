@@ -95,6 +95,7 @@ import { SuessGame } from './suess';
 import { UmzugGame } from './umzug';
 import { FunkGame } from './funk';
 import { SchaetzGame } from './schaetz';
+import { GeheimcodeGame } from './geheimcode';
 import { LexikonGame } from './lexikon';
 import { LiederGame } from './lieder';
 import { liederTon } from './liederton';
@@ -542,12 +543,12 @@ export class Room {
     // Eingaben ans laufende Minispiel – in der Aufwärmrunde (Phase `intro`) ans Übungsspiel, dort ohne Wetten
     socket.on('mini:input', (msg: { action: string; payload?: unknown }) => {
       const game = this.liveGame();
-      if (!playerId || !game) return;
+      // Nach einem Reconnect steuert nur noch die aktuelle Verbindung dieses Handys.
+      if (!playerId || !game || this.players.get(playerId)?.socketId !== socket.id) return;
       const action = String(asRecord(msg).action);
       const payload = asRecord(msg).payload;
       if (game.kind === 'kart') {
-        // Nach einem Reconnect zählt nur das aktive Handy; verspätete Übungseingaben gehören zur alten Instanz.
-        if (this.players.get(playerId)?.socketId !== socket.id) return;
+        // Verspätete Übungseingaben gehören zur alten Instanz.
         const seq = asRecord(payload).miniSeq;
         if (seq !== undefined && seq !== this.miniSeq) return;
       }
@@ -1094,6 +1095,8 @@ export class Room {
         return new FunkGame(ids, ctx);
       case 'schaetz':
         return new SchaetzGame(ids, ctx);
+      case 'geheimcode':
+        return new GeheimcodeGame(ids, ctx);
       case 'lexikon':
         return new LexikonGame(ids, ctx);
       case 'lieder':
