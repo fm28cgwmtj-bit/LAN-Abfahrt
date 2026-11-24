@@ -1,6 +1,7 @@
 import { MINI_INFO, ORIENT_TEXT, type PhoneOrientation } from '../../shared/games';
 import type { MiniKind } from '../../shared/types';
 import { LS, type Screen, escapeHtml, store } from './core';
+import { isTextEntry, syncGameZoom } from './zoom';
 
 /**
  * Handy-Ausrichtung – ein zentraler Baustein für alle Spiele (Haltung steht in `MINI_INFO[kind].orientation`,
@@ -111,6 +112,9 @@ const PASSIVE = /(^|-)(over|spectate|watch|wait|out)(-|$)/;
 export function syncOrientation(screenT: Screen) {
   const s = store.state;
   const [key, , override] = screenT;
+  const inPlay = !!s && store.joined && !store.editing && !store.kicked &&
+    (s.phase === 'mini' || s.phase === 'intro' || s.phase === 'board' || s.phase === 'story');
+  syncGameZoom(inPlay);
   // Regelkarte (Phase `intro`) zählt schon zum Spiel: gleiche Haltung, Overlay greift dort bereits
   const gameKind = s?.phase === 'mini' ? s.mini?.kind : s?.phase === 'intro' ? s.intro?.kind : undefined;
   if (store.joined && gameKind && gameKind in MINI_INFO) {
@@ -249,11 +253,11 @@ function relock() {
   }
 }
 
-function onTap() {
-  if (orientExempt() || !hasFullscreen()) return;
-  // Erst im Spiel ins Vollbild (Lobby mit Namensfeld bleibt normal); danach bleibt es die Session über
-  const inGame = store.state?.phase === 'mini' || store.state?.phase === 'intro';
-  if (!document.fullscreenElement && (inGame ? want !== 'any' : fsWanted)) void enterFullscreen();
+function onTap(event: PointerEvent) {
+  if (orientExempt() || !hasFullscreen() || isTextEntry(event.target) || inputFocused()) return;
+  if (event.target instanceof Element && event.target.closest('#zoom-help')) return;
+  // Auch Spiele mit freier Ausrichtung gehen beim ersten Tipp ins Android-Vollbild.
+  if (!document.fullscreenElement && (document.documentElement.classList.contains('game-zoom-locked') || fsWanted)) void enterFullscreen();
 }
 document.addEventListener('pointerdown', onTap, true);
 document.addEventListener('pointerup', onTap, true);

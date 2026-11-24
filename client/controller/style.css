@@ -64,6 +64,29 @@ body {
   background-size: 9px 9px;
 }
 
+/* Die Spielfläche fängt Pinch und Doppeltipp ab. Lange Listen bekommen einen
+   eigenen Scrollbereich, sodass ein Finger weiterhin durch Antworten wischen kann. */
+html.game-zoom-locked body { touch-action: none; }
+:where(html.game-zoom-play:not(.wu):not(.pseudo-land)) #app {
+  min-height: min(100%, calc(100dvh - 16px));
+  max-height: 100%;
+  overflow-y: auto;
+}
+html.game-zoom-locked #app { touch-action: pan-x pan-y; }
+html.game-zoom-locked #app :is(.sp-canvas.draw, .lx, .k3, .pcq) { touch-action: none; }
+
+#zoom-help {
+  position: fixed; inset: auto; transform-origin: top left; margin: 0; padding: 12px;
+  max-width: none; max-height: none; border: 0; background: transparent; color: var(--ink);
+  overflow: auto; touch-action: manipulation;
+}
+#zoom-help[open] { display: grid; place-items: center; }
+#zoom-help::backdrop { background: rgb(31 22 14 / 78%); }
+.zoom-panel {
+  display: grid; gap: 12px; width: min(100%, 360px); padding: 16px; text-align: center;
+  background: var(--paper); border: 4px solid var(--wood-dark); box-shadow: 0 4px 0 var(--outline);
+}
+
 /* „Du bist ORANGE“ – Farbmarke der eigenen Spielerfarbe */
 .me-color { display: inline-block; padding: 2px 5px; border: 2px solid var(--outline); }
 

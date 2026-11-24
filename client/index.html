@@ -2,7 +2,7 @@
 <html lang="de">
   <head>
     <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1, user-scalable=no, viewport-fit=cover" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
     <meta name="theme-color" content="#5fa437" />
     <meta name="apple-mobile-web-app-capable" content="yes" />
     <title>LAN-Abfahrt</title>
@@ -13,6 +13,14 @@
     <div id="toast" class="toast hidden"></div>
     <div id="orient-card" class="orient-card hidden"></div>
     <div id="orient" class="orient hidden"></div>
+    <dialog id="zoom-help" aria-labelledby="zoom-title" aria-describedby="zoom-tip">
+      <div class="zoom-panel">
+        <h2 id="zoom-title">Spielansicht vergrößert</h2>
+        <p id="zoom-tip">Ziehe zwei Finger zusammen, um wieder das ganze Spielfeld zu sehen.</p>
+        <button type="button" class="zoom-reset">Zoom zurücksetzen</button>
+        <button type="button" class="secondary small zoom-continue">Mit Zoom weiterspielen</button>
+      </div>
+    </dialog>
     <script type="module" src="./controller/main.ts"></script>
   </body>
 </html>

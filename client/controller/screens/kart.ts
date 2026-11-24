@@ -31,9 +31,6 @@ let gasCommandNumber = 0;
 /** Kipp-Lenkung bleibt über Bildschirmwechsel hinweg aktiv (auch für Auto-Fußball) */
 export const tilt = { on: false, center: 0, roll: 0, smooth: 0, lastSample: 0, unsub: null as (() => void) | null };
 
-// iOS: Pinch-Zoom-Gesten im Spiel unterbinden
-document.addEventListener('gesturestart', (e) => e.preventDefault());
-
 /** Rückmeldung (Android: Vibration, iPhone: Klick + Rand-Blitz) – auch von Auto-Fußball genutzt */
 export const vibrate = (pattern: number | number[]) => haptic(pattern);
 
