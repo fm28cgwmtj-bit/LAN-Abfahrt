@@ -1,5 +1,5 @@
 {
-  "updated": "2026-11-24T17:00+00:00",
+  "updated": "2026-11-24T16:53+01:00",
   "artifact": "https://claude.ai/artifact/8XRwB1H3bsUUTV5g9dAtmi (slug 3cefa65c-7b4d-4434-a343-b15cb2c458b5)",
   "analysis": {
     "title": "Spiel-Review (Tiefenanalyse, 5.11.)",
@@ -45,6 +45,14 @@
       "detail": "Stufe 1–3: Übersicht „Wo läuft was“, Kopie/Direkt bearbeiten/Original wiederherstellen, Speichern wirkt sofort, Editor entrümpelt. Dateien: client/musik/, client/musik.html, server/music.ts, shared/music.ts.",
       "branch": "claude/ecstatic-goodall-rlrs70-musik",
       "since": "2026-11-24"
+    },
+    {
+      "type": "in Arbeit · Nils",
+      "kind": null,
+      "title": "Party-Modus 3.0 – Stufe 1 · Kurzparty 45 min",
+      "detail": "Die Standardparty bekommt drei kurze Runden, ein Würfelfenster von sechs Sekunden und ein sichtbares Zeitbudget, das die Spielauswahl steuert. Ich baue die fünf Brett-Kurzformen, die Poolwahl und die Handy-Abstimmung über drei Vorschläge in server/board.ts, server/room.ts, den betroffenen Minispielen, shared/games.ts und den Brett- und Lobbyansichten für TV und Handy.",
+      "branch": "nils/kurzparty",
+      "since": "2026-11-24"
     }
   ],
   "queue": [
@@ -57,7 +65,7 @@
       "detail": "Es gibt schon ein Spielbrett „Ferienhaus“ (Party-Abfahrt in der Lobby: 3/5/8 Runden, gleichzeitig würfeln, Münzen/Cocktails, Bar, Strandladen mit 4 Items, Gabelung, Duell „Teilen oder Klauen“, nach jeder Runde ein Minispiel, Finale Mord/Verräter, Bonus-Cocktails, Tageszeit, Nachzügler, Fortsetzen). Marlon hat es noch nie gespielt und wünscht sich einen großen Modus à la Mario Party / Lego Party, 2D reicht, Zieldauer ≈ 45 Minuten. Reihenfolge der Stufen unten ist der Vorschlag.",
       "steps": [
         "Stufe 0 · Testabend mit dem bestehenden Brett (3 Runden, Bots dazu) – Marlon kennt den Modus noch nicht; Feedback entscheidet, was Stufe 2–4 wirklich braucht.",
-        "Stufe 1 · „Kurzparty 45 min“ als Standard: 3 Runden, nur kurze Spiele, Würfelfenster 6 s, Zeitbudget am TV sichtbar (Restzeit-Balken, Spiel-Auswahl passt sich an); dazu mehr Minispiele aufs Brett mit Kurzformen: Wackelturm (90 s, Höhe zählt – Marlons Wunsch), Igel-Krieg („Kurz-Igel“), Kofferpacken (60 s), Minigolf (3 Löcher), Sektkorken als Blitz-Spiel; Minispiel-Pool wählbar (Alle / Action / Kopf & Bauch / Favoriten / Getestete) und Spiele-Roulette mit 3 Vorschlägen + Handy-Abstimmung (à la Lego Party).",
+        "Stufe 1 · „Kurzparty 45 min“ als Standard: 3 Runden, nur kurze Spiele, Würfelfenster 6 s, Zeitbudget am TV sichtbar (Restzeit-Balken, Spiel-Auswahl passt sich an); dazu mehr Minispiele aufs Brett mit Kurzformen: Wackelturm (90 s, Höhe zählt – Marlons Wunsch), Igel-Krieg („Kurz-Igel“), Kofferpacken (60 s), Minigolf (3 Löcher), Sektkorken als Blitz-Spiel; Minispiel-Pool wählbar (Alle / Action / Kopf & Bauch / Favoriten / Getestete) und Spiele-Roulette mit 3 Vorschlägen + Handy-Abstimmung (à la Lego Party). ← Nils",
         "Stufe 2 · Mehrere Bretter als Themenwelten: Ferienhaus (jetzt), Strandpromenade/Hafen, Berghütte am Rhein – je eigener Wege-Graph (BOARD_FIELDS verallgemeinern), eigene Ereignisse und Deko, Brett-Wahl in der Lobby.",
         "Stufe 3 · Brett-Mechaniken: Blitz-Events direkt auf dem Feld (30-s-Spiel für alle), Showdown-Feld (1 gegen 1 um einen Cocktail), Strandladen auf 6–8 Items (Fernglas, Sandsturm, Doppelcocktail), Rutsche/Fähre als Teleport, Überhol-Bonus.",
         "Stufe 4 · Präsentation: Brett-Kamera folgt der Figur (Zoom + Schwenk), Zwischenstand-Zeremonie nach jeder Runde, großes Finale mit Rangliste-Countdown, Moderator-Sprüche, animierte Figuren.",
