@@ -1,6 +1,6 @@
 /**
  * TV/Laptop: Panel „Spieler“ (Knopf oben links oder Taste P).
- * Zeigt alle Spieler mit Online/Offline-Status und erlaubt, einzelne oder alle zu entfernen.
+ * Zeigt alle Spieler mit Online/Offline-Status. Am Laptop lässt sich der VIP wählen oder jemand entfernen.
  * Eigenständiges DOM (über dem Phaser-Canvas) – der Server nimmt die Befehle nur von
  * Loopback-Verbindungen an (TV-Ansicht direkt am Laptop über http://localhost:…/tv.html).
  */
@@ -52,40 +52,49 @@ export function initPlayersPanel(socket: Socket) {
     <h3><span>Spieler</span><span class="hint">P = schließen</span></h3>
     <div class="list"></div>
     <div class="foot"><button data-act="all">Alle entfernen</button><span class="hint">Entfernte können per QR-Code neu beitreten.</span></div>
-    <div class="msg"></div>`;
+    <div class="msg" role="status"></div>`;
   document.body.append(toggle, panel);
   const list = panel.querySelector('.list') as HTMLElement;
   const msg = panel.querySelector('.msg') as HTMLElement;
   const allBtn = panel.querySelector('[data-act=all]') as HTMLButtonElement;
 
-  let local = true;
+  let local = false;
   let key = '';
   let lastMouse = -Infinity;
 
 
   // Der Server sagt nach 'host:hello', ob diese TV-Seite am Laptop selbst läuft (Loopback)
-  socket.on('host:info', (r: { local?: boolean }) => ((local = !!r?.local), (key = ''), render()));
+  socket.on('host:info', (r: { local?: boolean }) => {
+    local = !!r?.local;
+    key = '';
+    say('');
+    render();
+  });
+  socket.on('disconnect', () => {
+    local = false;
+    render();
+  });
 
   const say = (text: string) => (msg.textContent = text);
   const result = (ok: string) => (r: KickResponse) => say(r?.ok ? ok.replace('#', String(r.removed ?? 0)) : (r?.error ?? 'Hat nicht geklappt.'));
 
   /** Zweistufig bestätigen statt confirm() (blockiert sonst das Spiel auf dem TV) */
   const confirmBtn = (b: HTMLButtonElement, label: string, run: () => void) => {
-    let armed = 0;
+    let armedUntil = 0;
     b.textContent = label;
     b.addEventListener('click', () => {
-      if (performance.now() - armed < 3000) {
+      if (performance.now() < armedUntil) {
         run();
-        armed = 0;
+        armedUntil = 0;
         b.textContent = label;
         b.classList.remove('sure');
         return;
       }
-      armed = performance.now();
+      armedUntil = performance.now() + 3000;
       b.textContent = 'Sicher?';
       b.classList.add('sure');
       setTimeout(() => {
-        if (armed && performance.now() - armed >= 3000) ((b.textContent = label), b.classList.remove('sure'));
+        if (performance.now() >= armedUntil) ((b.textContent = label), b.classList.remove('sure'));
       }, 3100);
     });
   };
@@ -109,6 +118,7 @@ export function initPlayersPanel(socket: Socket) {
     key = k;
     list.innerHTML = '';
     if (!players.length) list.innerHTML = '<p class="hint">Noch niemand da – QR-Code scannen!</p>';
+    const humansOnline = players.some((p) => p.connected && !p.bot);
     for (const p of players) {
       const row = document.createElement('div');
       row.className = `row${p.connected ? '' : ' off'}`;
@@ -121,6 +131,17 @@ export function initPlayersPanel(socket: Socket) {
         row.querySelector('.name')!.append(tag);
       }
       (row.querySelector('.st') as HTMLElement).textContent = status(p);
+      if (local && p.connected && !p.isVip && (!p.bot || !humansOnline)) {
+        const vip = document.createElement('button');
+        confirmBtn(vip, '👑 Zum VIP machen', () => {
+          say('VIP-Wechsel wird bestätigt …');
+          socket.timeout(3000).emit('host:vip', p.id, (err: unknown, r?: KickResponse) => {
+            if (err) return say('Keine Antwort vom Server.');
+            say(r?.ok ? `${p.name} ist jetzt VIP.` : r?.error ?? 'VIP-Wechsel fehlgeschlagen.');
+          });
+        });
+        row.append(vip);
+      }
       const b = document.createElement('button');
       b.disabled = !local;
       confirmBtn(b, 'Entfernen', () => socket.emit('host:kick', p.id, result(`${p.name} wurde entfernt.`)));
@@ -128,7 +149,8 @@ export function initPlayersPanel(socket: Socket) {
       list.append(row);
     }
     allBtn.disabled = !local || !players.length;
-    if (!local) say('Spieler entfernen geht nur direkt am Laptop (http://localhost:…/tv.html).');
+    if (!socket.connected) say('Verbindung zum Server unterbrochen.');
+    else if (!local) say('Spieler verwalten geht nur direkt am Laptop (http://localhost:…/tv.html).');
   }
 
   window.addEventListener('mousemove', () => {

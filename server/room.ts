@@ -253,7 +253,7 @@ export class Room {
   /** Zwischenstand des Turniers – dieselbe Tabelle wie das Leaderboard des Abends, nur für diese Playlist */
   private turnierBoard = new SessionBoard();
   private offlineBucket = '';
-  /** Gastgeber = erster Mensch, der beigetreten ist. Kommt er zurück, ist er wieder VIP. */
+  /** Gastgeber: zunächst der erste Mensch, danach der am Laptop gewählte Mensch. */
   private hostId: string | null = null;
   /** Worauf gerade gewartet wird (Ergebnis, Story-Karte, …) und seit wann – für das Auto-Weiter */
   private gateKey: unknown = null;
@@ -608,7 +608,7 @@ export class Room {
       this.changed();
     });
 
-    this.handleKicks(socket, () => playerId);
+    this.handlePlayerPanel(socket, () => playerId);
   }
 
   // ---------------------------------------------------------------- Ablauf
@@ -1468,7 +1468,7 @@ export class Room {
 
   /**
    * Wer ist Spielleiter (VIP)?
-   * 1. Der Gastgeber (erster Mensch im Raum), sobald er verbunden ist – auch wenn er zwischendurch weg war.
+   * 1. Der Gastgeber, sobald er verbunden ist – auch wenn er zwischendurch weg war.
    * 2. Sonst bleibt der bisherige VIP – ist er ein Mensch, auch noch VIP_GRACE_MS nach dem Verbindungsabbruch.
    * 3. Sonst der am längsten verbundene Mensch. Bots werden nur VIP, wenn gar kein Mensch verbunden ist.
    */
@@ -1490,11 +1490,11 @@ export class Room {
   // ================================================================ Ende VIP-Nachfolge
 
 
-  // ---------------------------------------------------------------- Spieler entfernen & Offline
-  // Kick vom VIP-Handy bzw. vom Laptop (TV-Panel „Spieler“), Offline-Frist in der Lobby.
+  // ---------------------------------------------------------------- Spielerverwaltung & Offline
+  // VIP-Wechsel am Laptop, Kick vom VIP-Handy bzw. Laptop (TV-Panel „Spieler“), Offline-Frist in der Lobby.
   // Helfer/Konstanten: server/players.ts
 
-  private handleKicks(socket: Socket, myId: () => string | null) {
+  private handlePlayerPanel(socket: Socket, myId: () => string | null) {
     const reply = (ack: unknown, r: KickResponse) => typeof ack === 'function' && (ack as (r: KickResponse) => void)(r);
     const isVip = () => !!this.players.get(myId() ?? '')?.isVip;
     const isHost = () => isLaptop(socket.handshake);
@@ -1516,6 +1516,17 @@ export class Room {
     });
 
     // Laptop/TV: nur von Loopback-Verbindungen (127.0.0.1 / ::1) ohne Tunnel – die TV-Seite erfährt das über 'host:info'
+    socket.on('host:vip', (id: unknown, ack?: unknown) => {
+      if (!isHost()) return reply(ack, { ok: false, error: 'Nur direkt am Laptop (localhost) erlaubt.' });
+      const target = typeof id === 'string' ? this.players.get(id) : undefined;
+      if (!target || target.removed) return reply(ack, { ok: false, error: 'Spieler nicht gefunden.' });
+      if (!target.connected) return reply(ack, { ok: false, error: 'Der Spieler ist offline.' });
+      if (target.isBot && this.connectedHumans().length) return reply(ack, { ok: false, error: 'Wähle einen der verbundenen Menschen.' });
+      if (!target.isBot) this.hostId = target.id;
+      for (const player of this.players.values()) player.isVip = player === target;
+      this.changed();
+      reply(ack, { ok: true });
+    });
     socket.on('host:kick', (id: unknown, ack?: unknown) => {
       if (!isHost()) return reply(ack, { ok: false, error: 'Nur direkt am Laptop (localhost) erlaubt.' });
       const n = this.kickPlayers([String(id ?? '')]);
