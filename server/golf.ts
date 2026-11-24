@@ -26,7 +26,8 @@ interface Ball extends GolfBody {
 }
 
 /**
- * Urlaubs-Minigolf: alle Löcher (Party-Modus: 5), alle putten GLEICHZEITIG auf demselben Loch.
+ * Urlaubs-Minigolf: drei Bahnen auf dem Brett, fünf im Party-Einzelspiel, sonst alle Bahnen.
+ * Alle putten gleichzeitig auf demselben Loch.
  * Bälle stoßen zusammen (außer auf dem Abschlag): Wer einen liegenden Ball trifft, schubst ihn weiter – der rollt
  * mit normaler Reibung; fällt er ins Loch, zählt das für seinen Besitzer (ohne Zusatzschlag), fällt er ins Wasser,
  * kommt er straffrei an seine alte Stelle zurück.
@@ -52,14 +53,16 @@ export class GolfGame implements MiniGame {
   /** Loch wurde vorzeitig beendet (VIP „Nächstes Loch“) – Handy/TV erklären die Wertung */
   private ended = false;
   private timers = new Timers();
-  /** Party-Modus: nur 5 Bahnen (Pacing auf dem Spielbrett), sonst alle */
+  /** Auf dem Brett drei Bahnen, bei einem Einzelstart im Party-Modus weiterhin fünf. */
   private holeCount: number;
 
   constructor(
     private ids: string[],
     private ctx: MiniCtx,
   ) {
-    this.holeCount = ctx.mode === 'party' ? Math.min(5, GOLF_HOLES.length) : GOLF_HOLES.length;
+    this.holeCount = GOLF_HOLES.length;
+    if (ctx.board) this.holeCount = Math.min(GOLF.BOARD_HOLES, this.holeCount);
+    else if (ctx.mode === 'party') this.holeCount = Math.min(GOLF.PARTY_SINGLE_HOLES, this.holeCount);
     this.order = shuffle(ids);
     this.order.forEach((id, i) => {
       // Ballfarbe = Spielerfarbe des Abends

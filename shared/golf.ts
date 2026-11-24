@@ -83,6 +83,8 @@ export interface GolfHole {
 }
 
 export const GOLF = {
+  BOARD_HOLES: 3,
+  PARTY_SINGLE_HOLES: 5,
   BALL_R: 3,
   CUP_R: 5,
   /** Rollreibung: konstante Bremsung + geschwindigkeitsabhängiger Anteil */

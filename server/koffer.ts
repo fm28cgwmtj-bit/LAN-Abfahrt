@@ -7,7 +7,7 @@ const { Bodies, Body, Composite, Engine } = Matter;
 
 const TICK_MS = 50;
 /** Rundenlänge (zum Testen kürzer: KOFFER_TIME_MS=60000 npm run dev) */
-const TIME_MS = Number(process.env.KOFFER_TIME_MS) || KOFFER.TIME_MS;
+const TEST_TIME_MS = Number(process.env.KOFFER_TIME_MS);
 const STEP_MS = 1000 / 60;
 const B = KOFFER.BLOCK;
 const W = KOFFER.W * B;
@@ -179,7 +179,8 @@ export class KofferGame implements MiniGame {
 
   private start() {
     this.sub = 'play';
-    this.deadline = Date.now() + TIME_MS;
+    const duration = this.ctx.board ? KOFFER.BOARD_TIME_MS : KOFFER.TIME_MS;
+    this.deadline = Date.now() + (TEST_TIME_MS || duration);
     for (const car of this.cars) this.spawn(car);
     let last = Date.now();
     let carry = 0;

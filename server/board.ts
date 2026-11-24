@@ -3,8 +3,8 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import type { BoardAsk, BoardAward, BoardPrivate, BoardState, BoardStats, DuelPick, ItemKind, MiniKind, MiniTeams, PartyResumeInfo, SkipInfo } from '../shared/types';
 import {
-  BAR_FIELDS, BOARD_FIELDS, BOARD_KINDS, BOARD_TEAM_CHANCE, BOARD_TIMING, DOUBLE_ROUNDS, DUEL_PENALTY, DUEL_POT, FIELD_COINS, FINALE_COCKTAILS, FINALE_KINDS,
-  FIELD_TYPES, ITEM_INFO, ITEM_KINDS, ITEM_MIN_PRICE, KLAU_COINS, LONG_WAY_FIELDS, MINI_INFO, MINI_LENGTH, TEAM_KINDS, UNEVEN_TEAM_KINDS, cocktailPrice, fitsPlayers, miniLabel, teamLabel,
+  BAR_FIELDS, BOARD_FIELDS, BOARD_KINDS, BOARD_LENGTH, BOARD_TEAM_CHANCE, BOARD_TIMING, DOUBLE_ROUNDS, DUEL_PENALTY, DUEL_POT, FIELD_COINS, FINALE_COCKTAILS, FINALE_KINDS,
+  FIELD_TYPES, ITEM_INFO, ITEM_KINDS, ITEM_MIN_PRICE, KLAU_COINS, LONG_WAY_FIELDS, MINI_INFO, TEAM_KINDS, UNEVEN_TEAM_KINDS, cocktailPrice, fitsPlayers, miniLabel, teamLabel,
 } from '../shared/games';
 import { Timers, shuffle } from './minigame';
 
@@ -824,7 +824,7 @@ export class Board {
     // Nur Spiele, die zur Spielerzahl passen (z. B. Urlaubs-Fangen ab 3, max. 8 Spieler)
     // … und standardmäßig nur kurze/mittlere (≤ 4 min), damit die Party nicht stockt
     const fitsAll = BOARD_KINDS.filter((k) => fitsPlayers(k, n));
-    const short = fitsAll.filter((k) => MINI_LENGTH[k] !== 'lang');
+    const short = fitsAll.filter((k) => BOARD_LENGTH[k] !== 'lang');
     const fitting = this.longGames || !short.length ? fitsAll : short;
     const pool: MiniKind[] = fitting.filter((k) => k !== this.lastMini);
     if (!pool.length) pool.push(...(fitting.length ? fitting : BOARD_KINDS));

@@ -250,7 +250,7 @@ export function buildLobby(vip: boolean, onEdit: () => void) {
       gated.push({ btn: b, min: 2 });
     }
     menu.append(roundRow);
-    const longLabel = () => `Lange Spiele (Golf, Bowling …): ${partyLongGames ? 'AN' : 'AUS'}`;
+    const longLabel = () => `Lange Spiele (z. B. Bowling): ${partyLongGames ? 'AN' : 'AUS'}`;
     const longTog = el(`<button class="small ${partyLongGames ? '' : 'secondary'}"></button>`).firstElementChild as HTMLButtonElement;
     longTog.textContent = longLabel();
     longTog.addEventListener('click', () => {

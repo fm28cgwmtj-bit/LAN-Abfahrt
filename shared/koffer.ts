@@ -41,6 +41,7 @@ export const KOFFER = {
   /** Teile über der Dachlinie oder hinten raus zählen nur so viel */
   OUTSIDE: 0.5,
   TIME_MS: 150000,
+  BOARD_TIME_MS: 60_000,
   COUNTDOWN_MS: 3500,
   /** Nach Ablauf: so lange darf noch etwas rausfallen, dann klappt die Heckklappe zu */
   SETTLE_MS: 1500,

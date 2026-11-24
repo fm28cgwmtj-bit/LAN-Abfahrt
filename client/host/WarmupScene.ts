@@ -1,7 +1,7 @@
 import Phaser from 'phaser';
 import type { GameState, IntroState, MiniKind } from '../../shared/types';
 import { WORLD } from '../../shared/flunky';
-import { MINI_HOWTO, MINI_INFO, ORIENT_TEXT } from '../../shared/games';
+import { MINI_INFO, ORIENT_TEXT, miniGoal } from '../../shared/games';
 import { bus, getState, isAtLaptop, playerById } from './store';
 import { GOLD, backPlate, fitText, txt } from './ui';
 import { sfx } from './sfx';
@@ -52,12 +52,12 @@ export class WarmupScene extends Phaser.Scene {
   private render(s: GameState) {
     const it = isWarmup(s) ? s.intro : null;
     if (!it) return;
-    if (it.seq !== this.seq || it.kind !== this.kind) this.build(it);
+    if (it.seq !== this.seq || it.kind !== this.kind) this.build(it, s.partyActive);
     this.update2(it);
   }
 
   /** Leiste für eine neue Karte aufbauen (+ Ansage und kurzer Hinweis in der Bildmitte) */
-  private build(it: IntroState) {
+  private build(it: IntroState, board: boolean) {
     this.seq = it.seq;
     this.kind = it.kind;
     this.readyIds = new Set(it.ready);
@@ -65,7 +65,6 @@ export class WarmupScene extends Phaser.Scene {
     for (const t of this.flash) t.destroy();
     this.flash = [];
     const info = MINI_INFO[it.kind];
-    const how = MINI_HOWTO[it.kind];
     const bottom = BOTTOM.includes(it.kind);
     const y0 = bottom ? WORLD.H - BAR_H : 0;
 
@@ -76,7 +75,7 @@ export class WarmupScene extends Phaser.Scene {
     fitText(tag, 74, 0.75);
     this.tweens.add({ targets: tagBg, alpha: 0.65, duration: 700, yoyo: true, repeat: -1, ease: 'Sine.inOut' });
     const teams = it.teams ? `${it.teams.label} · ` : '';
-    this.title = txt(this, 90, y0 + 6, `${info.icon} ${info.title} · ${teams}${how?.goal ?? info.tagline}`, { color: GOLD, origin: [0, 0] });
+    this.title = txt(this, 90, y0 + 6, `${info.icon} ${info.title} · ${teams}${miniGoal(it.kind, board)}`, { color: GOLD, origin: [0, 0] });
     fitText(this.title, WORLD.W - 96, 0.75);
     this.count = txt(this, 6, y0 + 19, '', { origin: [0, 0] });
     this.wait = txt(this, 6, y0 + 19, '', { color: GOLD, origin: [0, 0] });

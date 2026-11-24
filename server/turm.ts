@@ -204,7 +204,7 @@ export class TurmGame implements MiniGame {
   private start() {
     this.sub = 'play';
     this.startedAt = Date.now();
-    this.deadline = this.startedAt + TURM.TIME_MS;
+    this.deadline = this.startedAt + (this.ctx.board ? TURM.BOARD_TIME_MS : TURM.TIME_MS);
     this.nextGust = this.startedAt + TURM.GUST_EVERY_MS;
     for (const lane of this.lanes) this.spawn(lane);
     let last = Date.now();
@@ -262,7 +262,8 @@ export class TurmGame implements MiniGame {
     lane.next = this.draw(lane);
     lane.fast = false;
     const top = this.topY(lane, true);
-    const y = -Math.min((TURM.VIEW_TOP - 1.5) * B, Math.max(-top + TURM.SPAWN_GAP * B, 6 * B));
+    const spawnHeight = Math.max(-top + TURM.SPAWN_GAP * B, 6 * B);
+    const y = this.ctx.board ? -spawnHeight : -Math.min((TURM.VIEW_TOP - 1.5) * B, spawnHeight);
     // Nicht immer exakt mittig – sonst wächst ein Turm ganz ohne Zutun gerade nach oben
     const steps = Math.round(TURM.SPAWN_JITTER * 2);
     const x = ((Math.floor(Math.random() * (2 * steps + 1)) - steps) * B) / 2;
@@ -541,6 +542,7 @@ export class TurmGame implements MiniGame {
     if (lane.frozen) return;
     lane.height = this.stableHeight(lane);
     lane.best = Math.max(lane.best, lane.height);
+    if (this.ctx.board) return;
     if (lane.height >= TURM.GOAL * B) {
       if (!lane.holdSince) lane.holdSince = now;
       if (now - lane.holdSince >= TURM.HOLD_MS) this.finish(lane, now);
@@ -600,20 +602,23 @@ export class TurmGame implements MiniGame {
     const score = (id: string) => {
       const l = byId.get(id);
       if (!l) return -1;
+      // Auf dem Brett zählt die Höhe in angezeigten Zehntelmetern.
+      if (this.ctx.board) return Math.round((l.height / B) * 10);
       return l.place ? 1e9 - l.place : l.height;
     };
     const m = (h: number) => `${(h / B).toFixed(1).replace('.', ',')} m`;
-    const winner = [...this.lanes].sort((a, b) => score(b.id) - score(a.id))[0];
-    const subtitle = !winner
-      ? 'Wackelig war’s!'
-      : winner.place
-        ? `${this.ctx.nameOf(winner.id)} hat das Gipfelkreuz erreicht!`
-        : winner.height > 0
-          ? `${this.ctx.nameOf(winner.id)} baut den höchsten Turm!`
-          : 'Alles ist ins Meer gefallen ...';
+    const groups = groupByScore(this.ids, score);
+    const winner = byId.get(groups[0]?.[0]);
+    let subtitle = 'Wackelig war’s!';
+    if (winner) {
+      if (this.ctx.board && groups[0].length > 1) subtitle = `Gleichstand auf ${m(winner.height)}!`;
+      else if (winner.place) subtitle = `${this.ctx.nameOf(winner.id)} hat das Gipfelkreuz erreicht!`;
+      else if (winner.height) subtitle = `${this.ctx.nameOf(winner.id)} baut den höchsten Turm!`;
+      else subtitle = 'Alles ist ins Meer gefallen ...';
+    }
     this.timers.later(3000, () =>
       this.ctx.finish({
-        groups: groupByScore(this.ids, score),
+        groups,
         details: Object.fromEntries(
           this.lanes.map((l) => [
             l.id,
@@ -661,6 +666,7 @@ export class TurmGame implements MiniGame {
     return {
       kind: 'turm',
       state: {
+        heightRace: !!this.ctx.board,
         sub: this.sub,
         endsIn: Math.max(0, this.deadline - now),
         gustIn: this.sub === 'play' ? Math.max(0, this.nextGust - now) : 0,

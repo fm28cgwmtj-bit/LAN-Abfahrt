@@ -1,3 +1,5 @@
+import { GOLF } from './golf';
+import { KOFFER } from './koffer';
 import type { FieldType, ItemKind, KurvePower, MiniKind, MiniTeams, Point, Team, TttItemKind, TttRole, TttShopItem } from './types';
 
 export interface MiniInfo {
@@ -177,6 +179,16 @@ export const MINI_HOWTO: Record<MiniKind, { goal: string; controls: HowToControl
   maler: { goal: 'Reihum malt einer ein geheimes Wort live auf den TV – alle anderen tippen, was das sein soll. Schneller = mehr Punkte.', controls: [{ icon: '✏️', text: 'Dran? Wort wählen, am Handy malen' }, { icon: '⌨️', text: 'Sonst: Tipp eintippen, Enter' }, { icon: '💡', text: 'Mit der Zeit kommen Buchstaben' }] },
 };
 
+/** Ziel auf Regelkarte und Aufwärmleiste für die tatsächlich gespielte Variante. */
+export function miniGoal(kind: MiniKind, board: boolean): string {
+  if (board) {
+    if (kind === 'turm') return `Nach ${TURM.BOARD_TIME_MS / 1000} s gewinnt der höchste stehende Turm.`;
+    if (kind === 'koffer') return `Packt in ${KOFFER.BOARD_TIME_MS / 1000} s möglichst viele Liter Gepäck ins Auto.`;
+    if (kind === 'golf') return `Wer braucht auf ${GOLF.BOARD_HOLES} Bahnen die wenigsten Schläge?`;
+  }
+  return MINI_HOWTO[kind].goal;
+}
+
 /**
  * Aufwärmrunde statt Regelkarte (Raum-Phase `intro`): Für diese Echtzeit-Spiele startet der Raum schon während der
  * Karte eine echte Instanz des Spiels im Übungsmodus (`MiniCtx.practice`) – TV zeigt die echte Szene mit
@@ -200,10 +212,10 @@ export const PARTY_KINDS: MiniKind[] = ['flunky', 'sprint', 'descent', 'wrap', '
 export const FINALE_KINDS: MiniKind[] = ['murder', 'ttt'];
 /**
  * Minispiele, die auf dem Spielbrett zufällig drankommen (Finale: Mord oder Verräter).
- * Ohne Igel/Turm (zu lang) und ohne Date-Night-Kapitel (Abstieg, Wraps). Lange Spiele (`MINI_LENGTH`)
+ * Mit 90-Sekunden-Wackelturm, ohne Igel (zu lang) und ohne Date-Night-Kapitel (Abstieg, Wraps). Lange Spiele (`BOARD_LENGTH`)
  * zieht das Brett nur mit der VIP-Option „Lange Spiele“.
  */
-export const BOARD_KINDS: MiniKind[] = ['flunky', 'sprint', 'sup', 'tidy', 'flieger', 'kurve', 'arena', 'bowling', 'sekt', 'enten', 'parcours', 'kart', 'smash', 'wasser', 'fangen', 'geist', 'grill', 'boule', 'sumo', 'bogen', 'darts', 'golf', 'autoball', 'volley', 'wpistole', 'zauber', 'angeln', 'koffer', 'suess', 'spion', 'umzug', 'wackel', 'schaetz', 'lexikon'];
+export const BOARD_KINDS: MiniKind[] = ['flunky', 'sprint', 'sup', 'tidy', 'flieger', 'kurve', 'arena', 'bowling', 'sekt', 'enten', 'parcours', 'kart', 'turm', 'smash', 'wasser', 'fangen', 'geist', 'grill', 'boule', 'sumo', 'bogen', 'darts', 'golf', 'autoball', 'volley', 'wpistole', 'zauber', 'angeln', 'koffer', 'suess', 'spion', 'umzug', 'wackel', 'schaetz', 'lexikon'];
 
 export type MiniLength = 'kurz' | 'mittel' | 'lang';
 /**
@@ -257,7 +269,7 @@ export const MINI_LENGTH: Record<MiniKind, MiniLength> = {
   pixel: 'mittel',
   bogen: 'mittel',
   darts: 'mittel',
-  // 6 Bahnen à ca. 75 s (Party-Modus: 5)
+  // 6 Bahnen à ca. 75 s (Einzelstart im Party-Modus: 5)
   golf: 'lang',
   autoball: 'mittel',
   wpistole: 'kurz',
@@ -295,6 +307,9 @@ export const MINI_LENGTH: Record<MiniKind, MiniLength> = {
   // → 6 Spieler ≈ 6–9 min, 12 Spieler (8 Maler, 60 s) ≈ 7–10 min
   maler: 'lang',
 };
+/** Dauer der Brettvarianten: 60 s Kofferpacken, 90 s Wackelturm oder drei statt sechs Golfbahnen. */
+export const BOARD_LENGTH: Record<MiniKind, MiniLength> = { ...MINI_LENGTH, koffer: 'kurz', turm: 'kurz', golf: 'mittel' };
+
 /** Minispiele der Date Night */
 export const DATE_KINDS: MiniKind[] = ['descent', 'rhythm', 'wrap', 'stars'];
 
@@ -826,6 +841,7 @@ export const TURM = {
   /** So lange muss der Turm über dem Ziel stehen bleiben */
   HOLD_MS: 2000,
   TIME_MS: 150000,
+  BOARD_TIME_MS: 90000,
   /** Nach dem ersten Gipfel haben die anderen noch so lange Zeit */
   AFTER_FINISH_MS: 20000,
   COUNTDOWN_MS: 3500,

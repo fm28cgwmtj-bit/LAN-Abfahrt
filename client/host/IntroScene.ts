@@ -1,7 +1,7 @@
 import Phaser from 'phaser';
 import type { GameState, IntroState, MiniKind, MiniTeams, Team } from '../../shared/types';
 import { TEAM_INFO, WORLD } from '../../shared/flunky';
-import { MINI_HOWTO, MINI_INFO, ORIENT_TEXT, miniInspired, teamHandicap } from '../../shared/games';
+import { MINI_HOWTO, MINI_INFO, ORIENT_TEXT, miniGoal, miniInspired, teamHandicap } from '../../shared/games';
 import { playerColor } from '../../shared/players';
 import { paintWoodFloor } from '../art/ground';
 import { bus, getState, isAtLaptop, playerById } from './store';
@@ -66,13 +66,13 @@ export class IntroScene extends Phaser.Scene {
       this.cardKey = key;
       this.teams = it.teams ?? null;
       this.crowdKey = '';
-      this.buildCard(it.kind, it.short, it.teams ?? null);
+      this.buildCard(it.kind, it.short, it.teams ?? null, s.partyActive);
     }
     this.renderCrowd(it);
   }
 
   /** Statische Regelkarte: Titel, Ziel, Steuer-Zeilen, Haltung */
-  private buildCard(kind: MiniKind, short: boolean, teams: MiniTeams | null) {
+  private buildCard(kind: MiniKind, short: boolean, teams: MiniTeams | null, board: boolean) {
     this.card.removeAll(true);
     const info = MINI_INFO[kind];
     const how = MINI_HOWTO[kind];
@@ -99,7 +99,7 @@ export class IntroScene extends Phaser.Scene {
       c.add(ink(this, WORLD.W / 2, y, insp, { color: '#7a5a3a' }));
       y += 12;
     }
-    const goal = ink(this, WORLD.W / 2, y + 2, how.goal, { wrap: 420 });
+    const goal = ink(this, WORLD.W / 2, y + 2, miniGoal(kind, board), { wrap: 420 });
     // Sehr lange Ziel-Sätze (Balance Board, Verräter) kleiner statt über die Steuer-Zeilen hinaus
     if (goal.height > 40) goal.setScale(Math.max(0.75, 40 / goal.height));
     c.add(goal);

@@ -1200,6 +1200,8 @@ export interface TurmLane {
 }
 
 export interface TurmState {
+  /** Brett-Kurzform: Am Zeitlimit zählt die dann stehende Höhe. */
+  heightRace: boolean;
   sub: 'countdown' | 'play' | 'over';
   endsIn: number;
   /** Ms bis zur nächsten Windböe (nur Anzeige) */

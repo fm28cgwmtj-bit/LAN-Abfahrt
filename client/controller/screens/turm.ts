@@ -48,7 +48,7 @@ function paintNext(c: HTMLCanvasElement, shape: number, v: number) {
 export function pickTurm(s: TurmState): Screen {
   const me = s.lanes.find((l) => l.id === store.playerId);
   if (!me) return ['spectate', message('Du schaust zu')];
-  if (s.sub === 'over') return ['turm-over', message(me.place ? `Gipfel! Platz ${me.place}` : 'Zeit um!', `Dein Turm: ${meters(me.height)}\nSchau auf den Fernseher!`)];
+  if (s.sub === 'over') return ['turm-over', message(s.heightRace ? 'Runde vorbei!' : me.place ? `Gipfel! Platz ${me.place}` : 'Zeit um!', `Dein Turm: ${meters(me.height)}\nSchau auf den Fernseher!`)];
   if (me.place) return [`turm-done-${me.place}`, message(`Gipfel erreicht – Platz ${me.place}!`, 'Schau zu, wie die anderen wackeln ...')];
   if (me.frozen) return ['turm-frozen', message('Keine Leben mehr!', `Dein Turm ist eingefroren bei ${meters(me.height)}.`)];
 
@@ -119,7 +119,7 @@ export function pickTurm(s: TurmState): Screen {
       if (!st || !lane) return;
       const sec = Math.ceil(st.endsIn / 1000);
       q(root, '.timer').textContent = st.sub === 'countdown' ? 'Start ...' : `${Math.floor(sec / 60)}:${String(sec % 60).padStart(2, '0')}`;
-      q(root, '.hgt').textContent = `${meters(lane.height)} / ${TURM.GOAL} m`;
+      q(root, '.hgt').textContent = st.heightRace ? meters(lane.height) : `${meters(lane.height)} / ${TURM.GOAL} m`;
       const nk = lane.next.join('-');
       if (nk !== nextKey) {
         nextKey = nk;
@@ -136,6 +136,7 @@ export function pickTurm(s: TurmState): Screen {
         haptic([60, 40, 60]);
       }
       const msg = q(root, '.turm-msg');
+      const goal = st.heightRace ? 'Die Höhe am Ende zählt!' : 'Stapel bis zum Gipfelkreuz!';
       const text =
         st.sub === 'countdown'
           ? `Gleich geht’s los! (${Math.max(1, Math.ceil(st.endsIn / 1000))})`
@@ -145,9 +146,9 @@ export function pickTurm(s: TurmState): Screen {
               ? 'Windböe! Festhalten!'
               : lane.hold > 0
                 ? 'Über dem Ziel – halten!'
-                : 'Stapel bis zum Gipfelkreuz!';
+                : goal;
       msg.textContent = text;
-      msg.classList.toggle('alert', text !== 'Stapel bis zum Gipfelkreuz!' && st.sub === 'play');
+      msg.classList.toggle('alert', text !== goal && st.sub === 'play');
     };
   }];
 }

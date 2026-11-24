@@ -3,9 +3,11 @@
  * Teile, Entlangrutschen an Wänden, Lock-Delay und Hineinschieben unter einen Überhang („Tucking“).
  * Aufruf: `npm run test:turm`
  */
+import { mock } from 'node:test';
 import Matter from 'matter-js';
-import { TURM, TURM_SHAPES, turmCellOffsets } from '../shared/games';
+import { BOARD_KINDS, TURM, TURM_SHAPES, turmCellOffsets } from '../shared/games';
 import { TurmGame } from '../server/turm';
+import type { MiniResult } from '../server/minigame';
 
 const B = TURM.BLOCK;
 let failed = 0;
@@ -213,6 +215,50 @@ for (const [delay, label] of [[1, 'schnell getippt'], [7, 'gedrückt gehalten (1
   const body = t.lane(0).bodies.find((b) => b !== over && Math.abs(b.position.y + 1.5 * B) < 1);
   check(!!body && Math.abs(body.position.x + B) < 1, `${label}: dort abgelegt (Schwerpunkt ${body ? `${body.position.x.toFixed(1)}/${body.position.y.toFixed(1)}` : '-'})`);
   game.dispose();
+}
+
+console.log('Brett-Kurzform und Gipfelrennen:');
+check(BOARD_KINDS.includes('turm'), 'Wackelturm ist im Brett-Pool');
+for (const variant of ['Brett', 'Arcade', 'Party-Einzelspiel']) {
+  mock.timers.enable({ apis: ['Date', 'setTimeout', 'setInterval'], now: 10_000 });
+  const board = variant === 'Brett';
+  const results: MiniResult[] = [];
+  const game = new TurmGame(['a', 'b', 'c'], {
+    onChange() {}, finish: (r) => results.push(r),
+    isConnected: () => true, nameOf: (id) => id,
+    mode: variant === 'Arcade' ? 'arcade' : 'party', board,
+  });
+  const state = () => {
+    const snap = game.snapshot();
+    if (snap.kind !== 'turm') throw new Error('Wackelturm erwartet');
+    return snap.state;
+  };
+  try {
+    const t = game.testApi();
+    // a erreicht das alte Gipfelziel, b und c liegen gleichauf. Vor Ablauf stürzt a ab.
+    const tall = t.place(0, 1, 0, -(TURM.GOAL + 3) * B, 0, true);
+    for (const i of [1, 2]) t.place(i, 1, 0, -6 * B - i, 0, true);
+    mock.timers.tick(TURM.COUNTDOWN_MS);
+    check(state().heightRace === board && state().endsIn === (board ? 90_000 : 150_000), `${variant}: richtige Wertung und Spieldauer`);
+    if (board) check(state().lanes[0].active!.y > (TURM.GOAL + 6) * B, 'auch über dem früheren Gipfel fallen neue Teile frei herab');
+    mock.timers.tick(50);
+    mock.timers.tick(TURM.HOLD_MS);
+    if (board) {
+      check(state().lanes[0].place === 0 && state().lanes[0].hold === 0, 'Gipfelhöhe beendet und verkürzt die Brettrunde nicht');
+      Matter.Body.setPosition(tall, { x: 0, y: -B });
+      mock.timers.tick(90_000 - TURM.HOLD_MS - 100);
+      check(state().sub === 'play' && state().endsIn === 50, '50 ms vor Schluss kann noch gebaut werden');
+      mock.timers.tick(50);
+      check(state().sub === 'over', 'nach 90 s ist die Wertung fest');
+      mock.timers.tick(3000);
+      check(JSON.stringify(results[0]?.groups) === '[["b","c"],["a"]]', 'Schlusshöhe entscheidet vor Besthöhe, Gleichstand teilt den Platz');
+    } else {
+      check(state().lanes[0].place === 1 && state().endsIn === TURM.AFTER_FINISH_MS, `${variant}: Gipfel halten sichert den ersten Platz und startet die Nachspielzeit`);
+    }
+  } finally {
+    game.dispose();
+    mock.timers.reset();
+  }
 }
 
 console.log(failed ? `\n${failed} Test(s) fehlgeschlagen` : '\nAlle Tests bestanden');

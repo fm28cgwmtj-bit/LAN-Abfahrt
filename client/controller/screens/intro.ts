@@ -1,6 +1,6 @@
 import type { IntroState, MiniKind, MiniTeams, Team } from '../../../shared/types';
 import { TEAM_INFO } from '../../../shared/flunky';
-import { MINI_HOWTO, MINI_INFO, ORIENT_TEXT, miniInspired, teamHandicapText } from '../../../shared/games';
+import { MINI_HOWTO, MINI_INFO, ORIENT_TEXT, miniGoal, miniInspired, teamHandicapText } from '../../../shared/games';
 import { type Screen, app, colorOfId, el, escapeHtml, me, message, nameOf, q, socket, store } from '../core';
 import { haptic } from '../haptic';
 
@@ -46,7 +46,7 @@ function buildIntro(kind: MiniKind, vipAtBuild: boolean, teams: MiniTeams | null
         <span class="it-count"></span>
       </div>
       <div class="it-info">
-        <p class="it-goal">${escapeHtml(how.goal)}</p>
+        <p class="it-goal">${escapeHtml(miniGoal(kind, !!store.state?.partyActive))}</p>
         ${teams ? teamsHtml(teams, kind) : ''}
         <ul class="it-ctrls">${how.controls.slice(0, 3).map((c) => `<li><span>${c.icon}</span><p>${escapeHtml(c.text)}</p></li>`).join('')}</ul>
         <p class="it-orient${info.orientation === 'landscape' ? ' land' : ''}">${ORIENT_TEXT[info.orientation]}</p>

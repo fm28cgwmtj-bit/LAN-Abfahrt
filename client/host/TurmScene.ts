@@ -97,6 +97,7 @@ export class TurmScene extends Phaser.Scene {
   private latest: TurmState | null = null;
   private hudKey = '';
   private cell = 8;
+  private towerScale = 1;
   private juice!: Juice;
   /** Pro Bahn: letztes aktives Teil, Platz, Böe, eingefroren (für Effekte) */
   private laneFx = new Map<string, { active: number | null; place: number; gust: number; frozen: boolean }>();
@@ -132,9 +133,9 @@ export class TurmScene extends Phaser.Scene {
     this.geo = geo;
     const s = geo.s;
     this.cell = Phaser.Math.Clamp(Math.round(B * s), 4, 16);
-    const platW = Math.round(TURM.PLATFORM_W * B * s);
+    this.towerScale = s;
     const rows = new Set(geo.lanes.map((l) => l.baseY));
-    background(this, `turm_${n}_${st.lanes.map((l, i) => pcol(l.id, i).index).join('.')}`, WORLD.W, WORLD.H, (p) => {
+    background(this, `turm_${st.heightRace ? 'height' : 'summit'}_${n}_${st.lanes.map((l, i) => pcol(l.id, i).index).join('.')}`, WORLD.W, WORLD.H, (p) => {
       paintSky(p, 0, 0, WORLD.W, WORLD.H, ['#7cc4f0', '#a8dcf5', '#d6effa', '#fbe7bd']);
       p.disc(420, 40, 14, '#fff1b0').disc(420, 40, 11, '#ffe27a');
       for (const baseY of rows) {
@@ -146,25 +147,23 @@ export class TurmScene extends Phaser.Scene {
         p.rect(0, lane.labelY, WORLD.W, LABEL, C.sand).hline(0, lane.labelY, WORLD.W, C.sandDark);
       }
       geo.lanes.forEach((l, i) => {
-        const x0 = l.cx - platW / 2;
-        // Steg: Planke + Pfähle ins Wasser
-        p.rect(x0, l.baseY, platW, Math.max(3, Math.round(B * s * 0.6)), C.wood);
-        p.hline(x0, l.baseY, platW, C.woodLight).hline(x0, l.baseY + Math.max(3, Math.round(B * s * 0.6)) - 1, platW, C.woodDarker);
-        for (const px of [x0 + 1, x0 + platW / 2 - 1, x0 + platW - 3]) p.rect(px, l.baseY + 3, 2, l.labelY - l.baseY - 3, C.woodDark);
-        // Ziellinie (gestrichelt)
-        const gy = Math.round(l.baseY - TURM.GOAL * B * s);
-        const half = Math.round((l.laneW - 8) / 2);
-        for (let x = l.cx - half; x < l.cx + half; x += 6) p.rect(x, gy, 3, 1, x % 12 < 6 ? C.red : C.white);
+        if (!st.heightRace) {
+          const gy = Math.round(l.baseY - TURM.GOAL * B * s);
+          const half = Math.round((l.laneW - 8) / 2);
+          for (let x = l.cx - half; x < l.cx + half; x += 6) p.rect(x, gy, 3, 1, x % 12 < 6 ? C.red : C.white);
+        }
         // Bahn-Trenner
         if (l.cx - l.laneW / 2 > 1) for (let y = l.top + 2; y < l.labelY; y += 4) p.px(Math.round(l.cx - l.laneW / 2), y, 'rgba(255,255,255,0.45)');
         // Farbmarke der Bahn
         p.rect(l.cx - l.laneW / 2 + 2, l.labelY + 2, 3, LABEL - 4, pcol(st.lanes[i]?.id, i).hex);
       });
     });
-    const crossKey = ensureTex(this, 'summitCross', summitCross);
     geo.lanes.forEach((l, i) => {
-      const gy = Math.round(l.baseY - TURM.GOAL * B * s);
-      this.add.image(Math.round(l.cx + (l.laneW - 8) / 2 - 6), gy + 1, crossKey).setOrigin(0.5, 1).setScale(s < 0.45 ? 0.5 : 1).setDepth(4);
+      if (!st.heightRace) {
+        const gy = Math.round(l.baseY - TURM.GOAL * B * s);
+        const cross = ensureTex(this, 'summitCross', summitCross);
+        this.add.image(Math.round(l.cx + (l.laneW - 8) / 2 - 6), gy + 1, cross).setOrigin(0.5, 1).setScale(s < 0.45 ? 0.5 : 1).setDepth(4);
+      }
       const lane = st.lanes[i];
       const p = playerById(lane.id);
       const maxChars = Math.max(3, Math.floor((l.laneW - 10) / 8));
@@ -205,6 +204,11 @@ export class TurmScene extends Phaser.Scene {
     this.latest = st;
     if (!this.geo) this.build(st);
     const geo = this.geo!;
+    // Hohe Brett-Türme dürfen über das Gipfelkreuz hinauswachsen. Alle Bahnen behalten denselben Maßstab.
+    if (st.heightRace) {
+      const height = Math.max(...st.lanes.map((lane) => lane.best)) + (TURM.SPAWN_GAP + 3) * B;
+      this.towerScale = Math.min(geo.s, (geo.lanes[0].baseY - geo.lanes[0].top - 2) / height);
+    }
     st.lanes.forEach((lane, i) => {
       const view = this.views.get(lane.id);
       const lay = geo.lanes[i];
@@ -262,7 +266,7 @@ export class TurmScene extends Phaser.Scene {
 
     if (st.sub === 'countdown') this.banner.setText(String(Math.max(1, Math.ceil(st.endsIn / 1000))));
     else if (st.sub === 'play') this.banner.setText('');
-    else this.banner.setText(st.lanes.some((l) => l.place) ? 'Gipfel!' : 'Zeit um!');
+    else this.banner.setText(st.heightRace ? 'Runde vorbei!' : st.lanes.some((l) => l.place) ? 'Gipfel!' : 'Zeit um!');
     if (st.sub === 'over' && this.lastSub === 'play') sfx(st.lanes.some((l) => l.place) ? 'win' : 'whistle');
     this.lastSub = st.sub;
 
@@ -274,8 +278,9 @@ export class TurmScene extends Phaser.Scene {
       this.hud.add(panel(this, 110, 0, 260, 20));
       const sec = Math.ceil(st.endsIn / 1000);
       const time = `${Math.floor(sec / 60)}:${String(sec % 60).padStart(2, '0')}`;
-      const gust = st.sub === 'play' && st.gustIn < 5000 ? `  Böe in ${Math.ceil(st.gustIn / 1000)}s!` : `  Ziel ${TURM.GOAL} m`;
-      this.hud.add(ink(this, WORLD.W / 2, 6, st.sub === 'countdown' ? `Stapelt bis zum Gipfelkreuz!` : `${time}${gust}`));
+      const goal = st.heightRace ? 'Höchster Turm gewinnt!' : 'Stapelt bis zum Gipfelkreuz!';
+      const gust = st.sub === 'play' && st.gustIn < 5000 ? `  Böe in ${Math.ceil(st.gustIn / 1000)}s!` : st.heightRace ? '  Höhe zählt' : `  Ziel ${TURM.GOAL} m`;
+      this.hud.add(ink(this, WORLD.W / 2, 6, st.sub === 'countdown' ? goal : `${time}${gust}`));
     }
   }
 
@@ -391,7 +396,7 @@ export class TurmScene extends Phaser.Scene {
     const st = this.latest;
     const geo = this.geo;
     if (!st || !geo) return;
-    const s = geo.s;
+    const s = this.towerScale;
     const k = 1 - Math.pow(0.0005, dtMs / 1000);
     const g = this.g;
     g.clear();
@@ -400,16 +405,29 @@ export class TurmScene extends Phaser.Scene {
       const view = this.views.get(lane.id);
       const lay = geo.lanes[i];
       if (!view || !lay) return;
+      // Die Planken skalieren mit den Teilen, auch wenn das Brett bei hohen Türmen herauszoomt.
+      const width = Math.round(TURM.PLATFORM_W * B * s);
+      const x = Math.round(lay.cx - width / 2);
+      const plank = Math.max(3, Math.round(B * s * 0.6));
+      g.fillStyle(0xb8783f).fillRect(x, lay.baseY, width, plank);
+      g.fillStyle(0xd39a5c).fillRect(x, lay.baseY, width, 1);
+      g.fillStyle(0x5e3518).fillRect(x, lay.baseY + plank - 1, width, 1);
+      g.fillStyle(0x8d5629);
+      for (const post of [x + 1, lay.cx - 1, x + width - 3]) {
+        g.fillRect(post, lay.baseY + plank, 2, Math.max(0, lay.labelY - lay.baseY - plank));
+      }
       for (const sp of view.sprites.values()) {
+        sp.img.setScale((B * s) / this.cell);
         sp.x += (sp.tx - sp.x) * k;
         sp.y += (sp.ty - sp.y) * k;
         sp.a += Phaser.Math.Angle.Wrap(sp.ta - sp.a) * k;
         this.place(sp, lay.cx + sp.x * s, lay.baseY - sp.y * s);
       }
-      // Bestmarke
+      // Im Höhenrennen markiert die Linie den aktuellen Wert, im Gipfelrennen die Bestmarke.
+      const mark = st.heightRace ? lane.height : lane.best;
       const color = pcol(lane.id, i).num;
-      if (lane.best > 0) {
-        const by = Math.round(lay.baseY - lane.best * s);
+      if (mark > 0) {
+        const by = Math.round(lay.baseY - mark * s);
         const half = (TURM.PLATFORM_W / 2 + 1) * B * s;
         g.fillStyle(color, 0.9);
         for (let x = lay.cx - half; x < lay.cx + half; x += 4) g.fillRect(Math.round(x), by, 2, 1);

@@ -3,6 +3,7 @@
  * Eingaben, eine Physik-Probe aller Löcher (Bot-Schläge mit Streuung), Ball-gegen-Ball-Stöße und der
  * Ablauf im Server-Spiel (angestoßen einlochen/ins Wasser, VIP „Nächstes Loch“). Aufruf: `npm run test:golf`
  */
+import { mock } from 'node:test';
 import { DRAG_DEAD, dragToPutt, swingToPutt } from '../client/controller/golfPutt';
 import type { MotionSample } from '../client/controller/motion';
 import {
@@ -212,7 +213,7 @@ interface TestGame {
   hole: number;
   balls: Record<string, GolfBody & { strokes: number; done: number; moving: boolean; wait: number }>;
 }
-function makeGame(mode: 'arcade' | 'party' = 'arcade', offline: Record<string, number> = {}) {
+function makeGame(mode: 'arcade' | 'party' = 'arcade', offline: Record<string, number> = {}, board = false) {
   let finished: MiniResult | null = null;
   const ctx: MiniCtx = {
     onChange: () => {},
@@ -220,7 +221,7 @@ function makeGame(mode: 'arcade' | 'party' = 'arcade', offline: Record<string, n
     isConnected: (id) => !(id in offline),
     offlineMs: (id) => offline[id] ?? 0,
     nameOf: (id) => id,
-    mode,
+    mode, board,
   };
   const g = new GolfGame(['A', 'B', 'C'], ctx);
   const t = g as unknown as TestGame;
@@ -298,14 +299,33 @@ const snap = (g: GolfGame) => g.snapshot().state as GolfState;
   g.dispose();
 }
 {
-  // Party-Modus (5 Löcher): nach dem letzten Loch geht’s zum Endstand, nicht zu Loch 6
-  const { g, t } = makeGame('party');
-  setup(t, 4, {});
-  t.endHole();
-  check(g.skippable()?.label === 'Zum Endstand', 'Party: letzte Scorekarte → „Zum Endstand“');
-  g.vipAction('next');
-  check(snap(g).sub === 'over', 'Party: Überspringen beendet das Spiel nach Loch 5');
-  g.dispose();
+  // Auf dem Brett führt die dritte Scorekarte zur Wertung; im Arcade-Spiel folgt die vierte Bahn.
+  mock.timers.enable({ apis: ['Date', 'setTimeout', 'setInterval'], now: 1000 });
+  for (const [name, mode, board, holes] of [
+    ['Brett', 'party', true, 3],
+    ['Party-Einzelspiel', 'party', false, 5],
+    ['Arcade', 'arcade', false, GOLF_HOLES.length],
+  ] as const) {
+    const { g, finished } = makeGame(mode, {}, board);
+    check(snap(g).holes === holes && snap(g).scores.A.length === holes, `${name}: Scorekarte mit ${holes} Bahnen`);
+    g.vipAction('next');
+    for (let hole = 0; hole < holes; hole++) {
+      mock.timers.tick(GOLF.TEE_MS);
+      check(snap(g).sub === 'play' && snap(g).hole === hole, `${name}: Bahn ${hole + 1} spielbar`);
+      g.input('A', 'putt', { seq: 0, a: 0, p: 0.3 });
+      check(snap(g).balls.A.s === 1, `${name}: Putt auf Bahn ${hole + 1} angenommen`);
+      g.vipAction('next');
+      mock.timers.tick(1000);
+      check(snap(g).sub === 'card' && snap(g).scores.A[hole] === golfSkipScore(1, GOLF_HOLES[hole].par), `${name}: gespielter Putt ist gewertet`);
+      check(g.skippable()?.label === (hole === holes - 1 ? 'Zum Endstand' : 'Nächstes Loch'), `${name}: passendes Ziel auf Scorekarte ${hole + 1}`);
+      g.vipAction('next');
+    }
+    check(snap(g).sub === 'over', `${name}: Ende nach Bahn ${holes}`);
+    mock.timers.tick(snap(g).endsIn);
+    check(!!finished()?.details.A, `${name}: Ergebnis an den Raum gemeldet`);
+    g.dispose();
+  }
+  mock.timers.reset();
 }
 
 {

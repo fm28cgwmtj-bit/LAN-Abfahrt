@@ -1,5 +1,5 @@
 import type { IntroState, MiniKind } from '../../shared/types';
-import { MINI_HOWTO, MINI_INFO } from '../../shared/games';
+import { MINI_INFO, miniGoal } from '../../shared/games';
 import { type Screen, el, escapeHtml, me, q, socket, store } from './core';
 import { haptic } from './haptic';
 import { waitingNames } from './screens/intro';
@@ -63,7 +63,7 @@ function mountBar(kind: MiniKind, seq: number) {
   bar?.remove();
   barFor = id;
   const info = MINI_INFO[kind];
-  const goal = MINI_HOWTO[kind]?.goal ?? info.tagline;
+  const goal = miniGoal(kind, !!store.state?.partyActive);
   bar = el(`
     <div class="wu-bar">
       <span class="wu-tag">AUFWÄRMEN</span>
@@ -111,8 +111,7 @@ function updateBar() {
   }
   // Ziel-Satz, bis man selbst bereit ist – danach, auf wen noch gewartet wird
   const goal = q(b, '.wu-goal');
-  const info = MINI_INFO[st.kind];
-  const text = !mine ? `· ${MINI_HOWTO[st.kind]?.goal ?? info.tagline}` : others.length ? `· Warte auf ${waitingNames(others)} …` : '· Alle bereit – los geht’s!';
+  const text = !mine ? `· ${miniGoal(st.kind, !!store.state?.partyActive)}` : others.length ? `· Warte auf ${waitingNames(others)} …` : '· Alle bereit – los geht’s!';
   if (goal.textContent !== text) goal.textContent = text;
   const vip = !!me()?.isVip;
   const go = q(b, '.wu-go');
