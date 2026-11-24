@@ -331,13 +331,8 @@ export class KartScene extends Phaser.Scene {
   }
 
   private countdownBanner(st: KartState) {
-    const secs = this.cd.seconds;
-    const name = getTrack(st.track).def.name;
-    this.banner.setText(secs > 3 ? name.toUpperCase() : String(Math.max(1, secs)));
-    this.banner.setFontSize(secs > 3 ? 16 : 24);
-    const where = !st.splitOk ? 'jeder fährt auf seinem Handy' : st.view === 'split' ? 'Splitscreen auf dem TV' : 'alle fahren am Handy';
-    // Bis 4 Spieler wählt jeder selbst (Knopf oben in der Mitte am Handy)
-    this.sub.setText(secs > 3 ? `${st.laps} Runden – ${where}${st.splitOk ? '\nAm Handy oben: TV / HANDY wählen' : ''}` : '');
+    this.banner.setText(String(Math.max(1, this.cd.seconds)));
+    this.sub.setText(`${getTrack(st.track).def.name} · ${st.laps} Runden`);
     this.bannerBg.setVisible(true);
   }
 

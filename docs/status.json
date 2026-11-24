@@ -1,11 +1,18 @@
 {
-  "updated": "2026-11-24T14:40+00:00",
+  "updated": "2026-11-24T14:17+00:00",
   "artifact": "https://claude.ai/artifact/8XRwB1H3bsUUTV5g9dAtmi (slug 3cefa65c-7b4d-4434-a343-b15cb2c458b5)",
   "analysis": {
     "title": "Spiel-Review (Tiefenanalyse, 5.11.)",
     "url": "https://claude.ai/artifact/76ucbosiWoyLfWBYx2VBK1"
   },
   "inProgress": [
+    {
+      "type": "Spieltest im Fork",
+      "kind": "kart",
+      "title": "Kart-Rennen: Gas antippen, frei driften",
+      "detail": "Gas rastet ein, Bremse löst es. Drift und Item haben eigene Knöpfe. Zum Ausprobieren vor dem Rennen gibt es eine Aufwärmrunde.",
+      "branch": "codex/spieltest"
+    },
     {
       "type": "Erweiterung",
       "kind": "lexikon",

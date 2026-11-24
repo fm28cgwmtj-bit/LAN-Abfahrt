@@ -632,7 +632,6 @@ canvas.vs-prop { width: 40px; height: 44px; image-rendering: pixelated; }
 .k3 {
   position: fixed; inset: 0; overflow: hidden; touch-action: none; user-select: none; -webkit-user-select: none;
   background: var(--paper); font-size: 10px;
-  --bw: clamp(92px, 26vmin, 132px); --bh: clamp(68px, 20vmin, 96px); --gap: 8px;
   --sl: env(safe-area-inset-left, 0px); --sr: env(safe-area-inset-right, 0px); --sb: env(safe-area-inset-bottom, 0px); --st: env(safe-area-inset-top, 0px);
 }
 .k3-phone { background: #2d1b12; }
@@ -671,18 +670,15 @@ canvas.vs-prop { width: 40px; height: 44px; image-rendering: pixelated; }
 .k3-center.go { font-size: 36px; color: #b9e39a; }
 .k3-center.turbo { font-size: 24px; color: #ffd25e; }
 .k3-center.hit { font-size: 24px; color: #ff8a7a; }
-.k3-center.small { font-size: 9px; }
 .k3-top { position: absolute; right: calc(10px + var(--sr)); top: calc(8px + var(--st)); left: auto; z-index: 5; display: flex; align-items: flex-start; gap: 10px; }
 .k3-small { padding: 7px 8px; font-size: 7px; min-height: 0; background: rgba(0,0,0,0.45); color: #fff4d6; border: 2px solid rgba(255,255,255,0.5); box-shadow: none; }
 .k3-split .k3-small { background: var(--paper-light); color: var(--ink); border-color: var(--wood-dark); }
-.k3-item { width: 64px; height: 64px; padding: 2px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px; min-height: 0; font-size: 6px;
-  background: #f2c33a; box-shadow: inset 0 3px 0 #ffe08a, inset 0 -4px 0 #c08316, 0 3px 0 var(--outline); border: 2px solid var(--outline); }
-.k3-item:disabled { opacity: 0.55; filter: grayscale(0.6); }
-.k3-item.has { animation: k3pulse 0.6s infinite alternate; }
-@keyframes k3pulse { to { transform: scale(1.08); } }
-.k3-item canvas { width: 36px; height: 36px; image-rendering: pixelated; }
 .k3-left { position: absolute; left: 0; top: 0; bottom: 0; width: 46%; z-index: 2; touch-action: none; }
-.k3-right { position: absolute; right: 0; top: 0; bottom: 0; width: 54%; z-index: 2; touch-action: none; }
+.k3-right {
+  position: absolute; z-index: 4; bottom: calc(10px + var(--sb)); right: calc(10px + var(--sr));
+  display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px;
+  width: min(calc(49% - var(--sr)), 65vmin, 272px);
+}
 .k3-leftlabel { position: absolute; left: calc(14px + var(--sl)); bottom: calc(14px + var(--sb)); font-size: 7px; color: rgba(255,255,255,0.75); text-shadow: 1px 1px 0 var(--outline); line-height: 1.6; pointer-events: none; }
 .k3-split .k3-leftlabel { color: var(--ink-soft); text-shadow: none; }
 .k3-stick { position: absolute; width: 0; height: 0; display: none; pointer-events: none; }
@@ -695,29 +691,42 @@ canvas.vs-prop { width: 40px; height: 44px; image-rendering: pixelated; }
 .k3-wheel-in::before { content: ''; position: absolute; left: -2px; right: -2px; top: 50%; height: 9px; margin-top: -4px; background: var(--wood-dark); }
 .k3-wheel-in::after { content: ''; position: absolute; left: 50%; top: 50%; bottom: -2px; width: 9px; margin-left: -4px; background: var(--wood-dark); }
 .k3-btn {
-  position: absolute; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px;
-  color: #fff4d6; text-shadow: 2px 2px 0 var(--outline); font-size: 13px; border: 3px solid var(--outline); border-radius: 10px; pointer-events: none; box-sizing: border-box;
+  position: relative; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 5px;
+  width: 100%; min-height: 48px; height: clamp(48px, 15vmin, 78px); padding: 2px;
+  color: #fff4d6; text-shadow: 1px 1px 0 var(--outline); font-size: clamp(9px, 2.9vmin, 13px);
+  border: 3px solid var(--outline); border-radius: 10px; box-sizing: border-box; touch-action: none;
 }
-.k3-btn small { font-size: 6px; opacity: 0.85; }
-.k3-gas { right: calc(12px + var(--sr)); bottom: calc(12px + var(--sb)); width: var(--bw); height: var(--bh); background: #46b04a; box-shadow: inset 0 4px 0 #7fd47f, inset 0 -6px 0 #2f7d32, 0 3px 0 var(--outline); font-size: 16px; }
-.k3-drift { right: calc(12px + var(--sr)); bottom: calc(12px + var(--sb) + var(--bh) + var(--gap)); width: var(--bw); height: calc(var(--bh) * 0.78); background: #3f8fe0; box-shadow: inset 0 4px 0 #7fbcf0, inset 0 -6px 0 #2d64a8, 0 3px 0 var(--outline); }
-.k3-brake { right: calc(12px + var(--sr) + var(--bw) + var(--gap)); bottom: calc(12px + var(--sb)); width: calc(var(--bw) * 0.72); height: var(--bh); background: #d8473c; box-shadow: inset 0 4px 0 #f07a6e, inset 0 -6px 0 #9a2c22, 0 3px 0 var(--outline); font-size: 10px; }
-.k3-btn.down { transform: translateY(3px); filter: brightness(1.15); box-shadow: inset 0 2px 0 rgba(0,0,0,0.25), 0 0 0 var(--outline); }
-.k3.drifting .k3-drift { box-shadow: inset 0 2px 0 rgba(0,0,0,0.25), 0 0 0 4px #93d3f3; }
-.k3.charged .k3-drift { background: #f0973a; box-shadow: inset 0 2px 0 rgba(0,0,0,0.25), 0 0 0 4px #ffd25e; }
-.k3-intro { position: absolute; inset: 0; z-index: 9; background: rgba(20,12,8,0.96); color: #fff4d6; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 10px; padding: 12px 20px; text-align: left; }
-.k3.introing .k3-hud, .k3.introing .k3-center { visibility: hidden; }
-.k3-intro h2 { color: var(--gold); font-size: 14px; }
-.k3-intro p { color: #cfc1a8; font-size: 7px; }
-.k3-intro-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 6px 16px; font-size: 7.5px; line-height: 1.7; max-width: 640px; }
-.k3-intro b { color: #ffd25e; }
-/* war: @media (orientation: portrait) – jetzt Klasse von orientation.ts (gilt auch bei Pseudo-Quer) */
-:where(html:not(.land)) .k3-intro-grid { grid-template-columns: 1fr; }
+.k3-btn small { font-size: 6px; line-height: 1.35; }
+.k3-item { background: #f2c33a; color: var(--ink); text-shadow: none; gap: 2px; box-shadow: inset 0 3px 0 #ffe08a, inset 0 -4px 0 #c08316, 0 3px 0 var(--outline); }
+.k3-item canvas { width: clamp(20px, 7vmin, 36px); aspect-ratio: 1; image-rendering: pixelated; }
+.k3-item:disabled { opacity: 0.6; }
+.k3-item.has { border-color: #fff4be; }
+.k3-gas { background: #306a3c; box-shadow: inset 0 4px 0 #609567, inset 0 -5px 0 #254f2e, 0 3px 0 var(--outline); font-size: clamp(11px, 3.3vmin, 16px); }
+.k3-gas[aria-pressed="true"] { background: #227a31; outline: 3px solid #b9ff86; outline-offset: -3px; box-shadow: inset 0 4px 0 #58bc60, inset 0 -5px 0 #20662d, 0 0 9px #79e67e; }
+.k3-drift { background: #307bc1; box-shadow: inset 0 4px 0 #7fbcf0, inset 0 -5px 0 #2d64a8, 0 3px 0 var(--outline); }
+.k3-brake { background: #b54037; box-shadow: inset 0 4px 0 #f07a6e, inset 0 -5px 0 #912b24, 0 3px 0 var(--outline); }
+.k3-btn.down { transform: translateY(2px); filter: brightness(1.18); }
+.k3.drifting .k3-drift { box-shadow: 0 0 0 3px #93d3f3; }
+.k3.charged .k3-drift { background: #bc6c15; box-shadow: 0 0 0 3px #ffd25e; }
+.k3-lesson {
+  position: absolute; left: calc(10px + var(--sl)); bottom: calc(9px + var(--sb)); max-width: calc(45% - var(--sl));
+  z-index: 3; pointer-events: none; text-align: left; font-size: 8px; line-height: 1.6;
+  padding: 5px 7px; color: #fff4d6; background: #2d1b12; border-left: 3px solid var(--gold);
+}
+.k3:has(.k3-lesson:not([hidden])) .k3-leftlabel { visibility: hidden; }
+.k3[data-lesson="gas"] .k3-gas::after, .k3[data-lesson="drift"] .k3-drift::after, .k3[data-lesson="turbo"] .k3-drift::after {
+  content: ''; position: absolute; inset: -4px; pointer-events: none; border: 2px solid #ffe08a; border-radius: 11px;
+  animation: k3-tap 1.35s ease-out infinite;
+}
+.k3[data-lesson="drift"] .k3-drift::after { animation: k3-hold 1.8s ease-in-out infinite; }
+@keyframes k3-tap { 0%, 35% { opacity: 1; transform: scale(.88); } 66%, 100% { opacity: 0; transform: scale(1.12); } }
+@keyframes k3-hold { 0%, 78% { opacity: .9; } 90%, 100% { opacity: .15; } }
+@media (prefers-reduced-motion: reduce) {
+  .k3 .k3-btn::after { animation: none !important; }
+}
 :where(html:not(.land)) .k3-left { width: 50%; }
-:where(html:not(.land)) .k3-right { width: 50%; }
-:where(html:not(.land)) .k3 { --bw: clamp(84px, 24vmin, 120px); }
 :where(html:not(.land)) #app:has(.k3) .abort { top: 46%; }
-/* Hochkant: Pille unter KIPPEN/ITEM (sonst zu schmal nebeneinander) */
+/* Hochkant: Pille unter dem Kipp-Umschalter */
 :where(html:not(.land)) .k3-viewsw { top: calc(100px + var(--st)); }
 :where(html:not(.land)) .k3-viewnote { top: calc(100px + var(--st)); }
 

@@ -21,6 +21,9 @@ import type { UmzugState } from './umzug';
 import type { SektState } from './sekt';
 import type { MalerPrivate, MalerState } from './maler';
 
+/** Hält der Controller die Eingabe aufrecht, schickt er innerhalb dieser Frist ein Lebenszeichen. */
+export const HOLD_TIMEOUT_MS = 700;
+
 export interface Look {
   skin: number;
   hair: number;
@@ -1093,6 +1096,10 @@ export interface KartCar {
   angle: number;
   /** Aktuelle Lenkung (−1…1) – nur für die Optik */
   steer: number;
+  /** Per Antippen eingerastetes Gas, das die Bremse oder ein Eingabe-Reset löst. */
+  autoGas: boolean;
+  /** Kennung der zuletzt bestätigten Auto-Gas-Eingabe; bleibt beim automatischen Lösen erhalten. */
+  gasSeq?: number;
   /** 0 = noch vor der Startlinie, 1…LAPS = laufende Runde */
   lap: number;
   place: number;

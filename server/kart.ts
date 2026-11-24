@@ -1,5 +1,5 @@
 import type { KartCar, KartEvent, KartItem, KartState, MiniSnapshot } from '../shared/types';
-import { KART, KART_TRACKS, type KartInput, type Track, autopilot, getTrack, keepInside, project, stepKart } from '../shared/kart';
+import { KART, KART_TRACKS, NO_INPUT, type KartInput, type Track, autopilot, getTrack, keepInside, project, stepKart } from '../shared/kart';
 import { type MiniCtx, type MiniGame, Timers, asRecord, shuffle } from './minigame';
 
 const TICK_MS = KART.TICK_MS;
@@ -9,7 +9,7 @@ const r1 = (v: number) => Math.round(v * 10) / 10;
 
 const ITEM_NAMES: Record<KartItem, string> = { coconut: 'Kokosnuss', banana: 'Bananenschale', ice: 'Turbo-Eis', gull: 'Möwe' };
 
-interface Car extends KartCar {
+interface Car extends Omit<KartCar, 'autoGas'> {
   id: string;
   inp: KartInput;
   nextCp: number;
@@ -42,7 +42,7 @@ interface Gull {
 }
 
 /**
- * Kart-Rennen: GAS, BREMSE (im Stand rückwärts), DRIFT (halten + lenken → Funken → loslassen = Mini-Turbo), gelenkt per Touch oder Kippen.
+ * Kart-Rennen: GAS antippen, BREMSE löst Gas (im Stand rückwärts), DRIFT halten + lenken → Funken → loslassen = Mini-Turbo.
  * Ansicht: bis 4 Menschen Verfolger-Splitscreen auf dem TV – jeder kann aber für sich auf die eigene Ansicht am Handy
  * umschalten (fliegt dann aus dem Splitscreen). Ab 5 Menschen rendert jedes Handy seine eigene Verfolger-Ansicht.
  * Fährt keiner auf dem TV, zeigt der TV die Draufsicht. Die Physik (`stepKart`) ist geteilt, damit die Handys ihr eigenes Kart vorhersagen können.
@@ -110,7 +110,7 @@ export class KartGame implements MiniGame {
         dc: 0,
         bm: 0,
         phoneView: false,
-        inp: { steer: 0, gas: false, brake: false, drift: false },
+        inp: { ...NO_INPUT },
         nextCp: 0,
         prog: 0,
         spinMs: 0,
@@ -387,19 +387,35 @@ export class KartGame implements MiniGame {
 
   input(id: string, action: string, payload: unknown) {
     const c = this.cars.get(id);
-    if (!c) return;
+    if (!c || c.finished || this.sub === 'over') return;
     const pl = asRecord(payload);
+    const reset = action === 'steer' && pl.reset === true;
+    if (!reset && !this.ctx.isConnected(id)) return;
     if (action === 'steer') {
-      // { x: Lenkung, gas, brake, drift } – fehlende Felder bleiben, wie sie sind
-      c.inp.steer = clamp(Number(pl.x) || 0, -1, 1);
+      if (typeof pl.autoGas === 'boolean') {
+        c.inp.autoGas = pl.autoGas;
+        if (typeof pl.gasSeq === 'number' && Number.isSafeInteger(pl.gasSeq) && pl.gasSeq > 0) c.gasSeq = pl.gasSeq;
+      }
+      if (reset) return this.resetInputs(c);
+      if (typeof pl.x === 'number' && Number.isFinite(pl.x)) c.inp.steer = clamp(pl.x, -1, 1);
       if (typeof pl.gas === 'boolean') c.inp.gas = pl.gas;
       if (typeof pl.brake === 'boolean') c.inp.brake = pl.brake;
       if (typeof pl.drift === 'boolean') c.inp.drift = pl.drift;
     } else if (action === 'brake') {
       c.inp.brake = !!pl.on;
     } else if (action === 'item' && this.sub === 'race') {
-      this.useItem(c, Date.now());
+      return this.useItem(c, Date.now());
+    } else return;
+    if (c.inp.brake && c.inp.autoGas !== undefined) {
+      c.inp.autoGas = false;
+      c.inp.gas = false;
+      c.inp.drift = false;
+      // Auch ein kurzer Bremstipp zwischen zwei Physik-Ticks bricht den geladenen Drift ab.
+      c.driftDir = 0;
+      c.driftCharge = 0;
+      c.boostMs = 0;
     }
+    if (this.sub === 'countdown') this.ctx.onChange();
   }
 
   private useItem(c: Car, now: number) {
@@ -468,6 +484,8 @@ export class KartGame implements MiniGame {
         y: r1(c.y),
         angle: Math.round(c.angle * 100) / 100,
         steer: Math.round(c.steer * 10) / 10,
+        autoGas: !c.finished && this.sub !== 'over' && c.inp.autoGas === true,
+        gasSeq: c.gasSeq,
         lap: c.lap,
         place: c.place,
         finished: c.finished,
@@ -511,7 +529,16 @@ export class KartGame implements MiniGame {
 
   playerDisconnected(id: string) {
     const c = this.cars.get(id);
-    if (c) c.inp = { steer: 0, gas: false, brake: false, drift: false };
+    if (c) this.resetInputs(c);
+  }
+
+  private resetInputs(c: Car) {
+    // Der Steuerungsmodus bleibt erhalten: Ein einzelnes späteres DRIFT-Paket darf kein Gas geben.
+    const autoGas = c.inp.autoGas;
+    c.inp = { ...NO_INPUT, autoGas: autoGas === undefined ? undefined : false };
+    c.driftDir = 0;
+    c.driftCharge = 0;
+    if (this.sub === 'countdown') this.ctx.onChange();
   }
 
   // ---------------------------------------------------------------- Ansicht (TV-Splitscreen / Handy)

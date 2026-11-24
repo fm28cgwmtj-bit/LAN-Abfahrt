@@ -7,8 +7,7 @@ import type { Point } from './types';
 
 export const KART = {
   LAPS: 3,
-  /** Etwas länger als früher: Zeit für „So fährst du“ und die Ansichts-Wahl (TV / Handy) */
-  COUNTDOWN_MS: 8000,
+  COUNTDOWN_MS: 3000,
   /** Nach dem Sieger haben alle anderen noch so lange Zeit */
   AFTER_WINNER_MS: 20000,
   /** Notbremse, falls niemand ins Ziel kommt */
@@ -284,10 +283,13 @@ export function autopilot(track: Track, x: number, y: number, angle: number, spe
 export interface KartInput {
   /** −1 … 1 */
   steer: number;
+  /** Alter Controller: momentanes Gaspedal. */
   gas: boolean;
+  /** Neuer Controller: einmal Gas antippen; Bremsen oder Eingabe-Reset löst es. */
+  autoGas?: boolean;
   /** Bremsen, im Stand rückwärts */
   brake: boolean;
-  /** Drift-Knopf (gibt automatisch Gas) */
+  /** Drift-Knopf (auf alten Controllern zugleich Gas) */
   drift: boolean;
 }
 
@@ -333,6 +335,13 @@ export function stepKart(c: KartPhys, inp: KartInput, dt: number, T: Track | nul
   let vf = c.vx * fx + c.vy * fy;
   let vl = -c.vx * fy + c.vy * fx;
   c.offroad = T ? project(T, c.x, c.y).dist > T.half + 1 : false;
+  // Mit der Tipp-Steuerung beendet die Bremse auch einen Drift oder laufenden Turbo.
+  const brakePriority = inp.autoGas !== undefined && inp.brake;
+  if (brakePriority) {
+    c.driftDir = 0;
+    c.driftCharge = 0;
+    c.boostMs = 0;
+  }
   const boosting = c.boostMs > 0;
 
   if (spinning) {
@@ -342,7 +351,7 @@ export function stepKart(c: KartPhys, inp: KartInput, dt: number, T: Track | nul
     c.driftCharge = 0;
   } else {
     // Drift starten / beenden
-    if (c.driftDir === 0 && inp.drift && Math.abs(steer) > 0.35 && vf > KART.DRIFT_MIN_SPEED && !c.offroad) {
+    if (c.driftDir === 0 && inp.drift && !brakePriority && Math.abs(steer) > 0.35 && vf > KART.DRIFT_MIN_SPEED && !c.offroad) {
       c.driftDir = Math.sign(steer);
       c.driftCharge = 0;
     } else if (c.driftDir !== 0 && (!inp.drift || vf < 25)) {
@@ -356,8 +365,9 @@ export function stepKart(c: KartPhys, inp: KartInput, dt: number, T: Track | nul
     const drifting = c.driftDir !== 0;
     let max = c.offroad ? KART.SAND_SPEED * (boosting ? 1.7 : 1) : KART.MAX_SPEED * (boosting ? KART.BOOST_FACTOR : 1);
     if (o.finished) max *= 0.6;
-    // DRIFT gibt mit Gas (Daumen rutscht am Handy von GAS nach oben auf DRIFT)
-    const gas = !o.frozen && (inp.gas || inp.drift || drifting || boosting || !!o.finished);
+    // Alte Controller rutschen von GAS auf DRIFT. Die neue Steuerung hält Gas unabhängig vom Drift.
+    const throttle = inp.gas || (inp.autoGas ?? (inp.drift || drifting));
+    const gas = !o.frozen && (throttle || boosting || !!o.finished);
     const brake = !o.frozen && inp.brake && !drifting && !boosting;
     if (brake) {
       // Erst bremsen, im Stand rückwärts

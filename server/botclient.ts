@@ -1200,11 +1200,15 @@ export class Bot {
     if (m.kind === 'parcours') this.parcours(m.state);
 
     if (m.kind === 'kart' && m.state.sub === 'race') {
-      const k = m.state;
-      const car = k.karts[this.id];
-      if (car && !car.finished) {
+      const race = s.miniSeq;
+      if (m.state.karts[this.id]?.finished === false) {
         this.once('kart', async () => {
           await sleep(rand(80, 130));
+          const live = this.state;
+          if (live?.phase !== 'mini' || live.miniSeq !== race || live.mini?.kind !== 'kart' || live.mini.state.sub !== 'race') return;
+          const k = live.mini.state;
+          const car = k.karts[this.id];
+          if (!car || car.finished) return;
           const speed = Math.hypot(car.vx, car.vy);
           const ap = autopilot(getTrack(k.track), car.x, car.y, car.angle, Math.max(40, speed), this.kartLane);
           // etwas menschliche Unschärfe
@@ -1212,12 +1216,20 @@ export class Bot {
           // Driften in Kurven (mit Hysterese, damit die Ladung nicht verloren geht), bremsen nur wenn's eng wird
           if (!this.kartDrift && Math.abs(ap.steer) > 0.55 && speed > 50 && !car.offroad) this.kartDrift = Math.random() < 0.6;
           else if (this.kartDrift && (Math.abs(ap.steer) < 0.2 || speed < 30)) this.kartDrift = false;
-          this.send('steer', { x: Math.round(steer * 100) / 100, gas: true, brake: ap.brake && !this.kartDrift && Math.random() < 0.5, drift: this.kartDrift });
+          const brake = ap.brake && !this.kartDrift && Math.random() < 0.5;
+          // Einmal Gas antippen, nach jeder Bremsung wieder antippen. Reines Lenken lässt das Gas eingerastet.
+          const autoGas = !brake;
+          this.send('steer', {
+            miniSeq: race,
+            x: Math.round(steer * 100) / 100,
+            ...(car.autoGas !== autoGas ? { autoGas } : {}),
+            brake, drift: this.kartDrift,
+          });
           if (car.item) {
             if (!this.kartItemAt) this.kartItemAt = Date.now() + rand(600, 3500);
             if (Date.now() >= this.kartItemAt) {
               this.kartItemAt = 0;
-              this.send('item');
+              this.send('item', { miniSeq: race });
             }
           }
           if (Math.random() < 0.01) this.kartLane = rand(-6, 6);

@@ -15,6 +15,7 @@
     "test:music": "tsx scripts/test-music.ts",
     "render:music": "tsx scripts/render-music.ts",
     "test:darts": "tsx scripts/test-darts.ts",
+    "test:kart": "tsx scripts/test-kart.ts",
     "test:golf": "tsx scripts/test-golf.ts",
     "test:turm": "tsx scripts/test-turm.ts",
     "test:records": "tsx scripts/test-records.ts",

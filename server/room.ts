@@ -1,5 +1,6 @@
 import type { Server, Socket } from 'socket.io';
 import { randomUUID } from 'node:crypto';
+import { HOLD_TIMEOUT_MS } from '../shared/types';
 import type {
   GameLive,
   GameMeta,
@@ -118,8 +119,6 @@ const AUTO_STORY_MS = 10_000;
 const AUTO_MINI_MS = 5_000;
 /** Kurzer Wackler (WLAN-Loch, App kurz gewechselt): so lange merkt das laufende Spiel nichts davon */
 const DISCONNECT_GRACE_MS = 3_000;
-/** Gehaltene Eingaben (Stick & Co.) schickt das Handy alle 250–500 ms neu – bleiben sie so lange aus, gilt „losgelassen“ */
-const HOLD_TIMEOUT_MS = 700;
 /** Mindestabstand zwischen zwei Sendungen – unter dem 33-ms-Takt der 30-Hz-Spiele, damit kein Stand verloren geht */
 const FLUSH_MS = 30;
 
@@ -133,7 +132,11 @@ function holdRelease(kind: MiniKind, action: string, payload: unknown): { active
   const pl = asRecord(payload);
   const num = (v: unknown) => Number(v) || 0;
   if (action === 'stick') return { active: num(pl.x) !== 0 || num(pl.y) !== 0, neutral: { x: 0, y: 0 } };
-  if (action === 'steer' && (kind === 'kart' || kind === 'autoball')) {
+  if (action === 'steer' && kind === 'kart') {
+    // Auch reine Lenk-Updates erneuern die Frist: Ein zuvor eingerastetes Gas bleibt dabei aktiv.
+    return { active: true, neutral: { reset: true } };
+  }
+  if (action === 'steer' && kind === 'autoball') {
     return {
       active: num(pl.x) !== 0 || pl.gas === true || pl.brake === true || pl.drift === true || pl.boost === true,
       neutral: { x: 0, gas: false, brake: false, drift: false, boost: false },
@@ -542,6 +545,12 @@ export class Room {
       if (!playerId || !game) return;
       const action = String(asRecord(msg).action);
       const payload = asRecord(msg).payload;
+      if (game.kind === 'kart') {
+        // Nach einem Reconnect zählt nur das aktive Handy; verspätete Übungseingaben gehören zur alten Instanz.
+        if (this.players.get(playerId)?.socketId !== socket.id) return;
+        const seq = asRecord(payload).miniSeq;
+        if (seq !== undefined && seq !== this.miniSeq) return;
+      }
       if (this.phase === 'intro' && action === 'bet') return;
       this.trackHold(playerId, game.kind, action, payload);
       game.input(playerId, action, payload);
@@ -581,6 +590,9 @@ export class Room {
       p.connected = false;
       p.socketId = null;
       p.disconnectedAt = Date.now();
+      // Ein eingerastetes Gaspedal lösen wir bereits am Anfang der Verbindungs-Gnadenfrist.
+      const game = this.liveGame();
+      if (game instanceof KartGame) game.playerDisconnected(playerId);
       if (this.phase === 'lobby') {
         // Menschen bleiben eine Weile (grau, „offline seit …“) in der Lobby – aufgeräumt wird in tick()
         if (p.isBot) this.players.delete(playerId);

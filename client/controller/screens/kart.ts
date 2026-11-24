@@ -1,9 +1,9 @@
-import type { KartItem, KartState } from '../../../shared/types';
+import { HOLD_TIMEOUT_MS, type KartItem, type KartState } from '../../../shared/types';
 import { KART, KART_TRACKS, type KartInput, wrapAngle } from '../../../shared/kart';
 import { itemIcon } from '../../art/kartsprites';
-import { Mode7Renderer } from '../../kart3d/render';
+import { kartAssets, Mode7Renderer } from '../../kart3d/render';
 import { KartWorld } from '../../kart3d/world';
-import { onInputReset, localPoint } from '../stick';
+import { localPoint } from '../stick';
 import { type Screen, LS, app, colorOfId, el, message, q, secondsLeft, send, socket, store, toast } from '../core';
 import { enableMotion, motionSupport, onMotion } from '../motion';
 import { steerFromRoll, tiltLabel, tiltRoll } from '../tilt';
@@ -12,8 +12,7 @@ import { haptic } from '../haptic';
 /**
  * Kart-Rennen am Handy (quer halten):
  *   links  – schwebender Stick (Daumen irgendwo aufsetzen, nach links/rechts schieben) oder Kipp-Lenkung
- *   rechts – GAS (groß, unten rechts), BREMSE daneben (im Stand rückwärts), DRIFT direkt über GAS
- *            (Daumen von GAS nach oben rutschen lassen; DRIFT gibt mit Gas), ITEM oben rechts
+ *   rechts – GAS einmal antippen, dann ist der Daumen frei für DRIFT oder ITEM. BREMSE löst das Gas.
  * Ansicht „Handy“: das Handy rendert seine eigene Verfolger-Ansicht (Mode 7) hinter den Knöpfen.
  * Ansicht „TV“: der TV zeigt den Splitscreen, das Handy nur Platz/Runde/Item.
  * Bis 4 Spieler wählt jeder selbst (Knopf oben in der Mitte, gespeichert für die nächsten Rennen) – das Umschalten
@@ -24,11 +23,13 @@ const OFFROAD = { beach: 'Sand bremst!', harbor: 'Pflaster bremst!', pool: 'Rase
 const ITEM_LABEL: Record<KartItem, string> = { coconut: 'Kokosnuss', banana: 'Banane', ice: 'Turbo-Eis', gull: 'Möwe' };
 const LS_TILT = 'lanabfahrt.kartTilt';
 
+// Beim Wechsel Stick ↔ Kippen wird der Screen ersetzt. Nur dieser bewusste Umbau
+// übernimmt den lokalen Gaswunsch; neue Spiele und neue Verbindungen starten neutral.
+let steeringHandoff: { seq: number | undefined; on: boolean; gasSeq: number } | null = null;
+let gasCommandNumber = 0;
+
 /** Kipp-Lenkung bleibt über Bildschirmwechsel hinweg aktiv (auch für Auto-Fußball) */
 export const tilt = { on: false, center: 0, roll: 0, smooth: 0, lastSample: 0, unsub: null as (() => void) | null };
-
-/** „So fährst du“ nur einmal pro Rennen */
-let introFor = 0;
 
 // iOS: Pinch-Zoom-Gesten im Spiel unterbinden
 document.addEventListener('gesturestart', (e) => e.preventDefault());
@@ -92,11 +93,18 @@ export function pickKart(s: KartState): Screen {
 
 // ------------------------------------------------------------------ Fahr-Screen
 
-type Btn = 'gas' | 'brake' | 'drift';
-
 function buildDrive(mode: 'tilt' | 'touch', rerender: () => void) {
   const st0 = store.state?.mini?.kind === 'kart' ? store.state.mini.state : null;
   if (!st0) return null;
+  const miniSeq = store.state?.miniSeq;
+  const practice = store.state?.phase === 'intro' && store.state.intro?.warm;
+  const carry = steeringHandoff?.seq === miniSeq ? steeringHandoff : null;
+  steeringHandoff = null;
+  // Die Strecke wird pro Index zwischengespeichert. Bereits vor der ersten Eingabe
+  // malen, damit ein späterer Wechsel zur Handyansicht keinen Heartbeat blockiert.
+  kartAssets(st0.track);
+  const world = new KartWorld(st0.track, store.playerId!);
+  world.onSnapshot(st0);
   const support = motionSupport();
   const canTilt = support === 'ok' || support === 'needs-permission';
   const root = el(`
@@ -112,7 +120,6 @@ function buildDrive(mode: 'tilt' | 'touch', rerender: () => void) {
       <div class="k3-viewnote">📱 Ab 5 Spielern fährt jeder am Handy</div>
       <div class="k3-top">
         ${canTilt ? `<button class="k3-small k3-tilt">${mode === 'tilt' ? 'STICK' : 'KIPPEN'}</button>` : '<span></span>'}
-        <button class="k3-item" disabled><canvas width="16" height="16"></canvas><small>ITEM</small></button>
       </div>
       <div class="k3-left">
         ${
@@ -122,20 +129,12 @@ function buildDrive(mode: 'tilt' | 'touch', rerender: () => void) {
         }
       </div>
       <div class="k3-right">
-        <div class="k3-btn k3-drift" data-b="drift">DRIFT<small>halten + lenken</small></div>
-        <div class="k3-btn k3-brake" data-b="brake">BREMSE<small>im Stand: zurück</small></div>
-        <div class="k3-btn k3-gas" data-b="gas">GAS</div>
+        <button type="button" class="k3-btn k3-item" aria-label="Item einsetzen" disabled><canvas width="16" height="16"></canvas><small>ITEM</small></button>
+        <button type="button" class="k3-btn k3-drift" aria-label="Drift halten">DRIFT<small>halten + lenken</small></button>
+        <button type="button" class="k3-btn k3-brake" aria-label="Bremsen, im Stand rückwärts fahren">BREMSE<small>auch rückwärts</small></button>
+        <button type="button" class="k3-btn k3-gas" aria-label="Dauergas" aria-pressed="false"><span>GAS</span><small>antippen</small></button>
       </div>
-      <div class="k3-intro hidden">
-        <h2>So fährst du</h2>
-        <div class="k3-intro-grid">
-          <div><b>◀ ▶</b> Links: Daumen schieben = lenken${canTilt ? ' – oder KIPPEN antippen und das Handy wie ein Lenkrad drehen' : ''}</div>
-          <div><b>GAS</b> gedrückt halten – <b>BREMSE</b> bremst, im Stand geht's rückwärts</div>
-          <div><b>DRIFT</b>: Daumen von GAS nach oben rutschen + lenken → Funken blau → orange → loslassen = Mini-Turbo!</div>
-          <div><b>ITEM</b> oben rechts antippen</div>
-        </div>
-        <p>Tippen zum Weiter</p>
-      </div>
+      ${practice ? '<p class="k3-lesson" role="status"></p>' : ''}
     </div>
   `);
   app.append(root);
@@ -145,19 +144,36 @@ function buildDrive(mode: 'tilt' | 'touch', rerender: () => void) {
   rootEl.addEventListener('touchmove', (e) => e.preventDefault(), { passive: false });
 
   // ---- Eingaben
-  const inp: KartInput = { steer: 0, gas: false, brake: false, drift: false };
-  let last = { steer: 9, gas: false, brake: false, drift: false, t: 0 };
-  const push = (force = false) => {
+  const inp: KartInput = { steer: 0, gas: false, autoGas: false, brake: false, drift: false };
+  let last = { ...inp, t: performance.now() };
+  let lastGasSeq = carry?.gasSeq ?? 0;
+  const gasBtn = q<HTMLButtonElement>(root, '.k3-gas');
+  const gasLabel = q(root, '.k3-gas span');
+  const gasHint = q(root, '.k3-gas small');
+  const setGas = (on: boolean) => {
+    inp.autoGas = on;
+    gasBtn.setAttribute('aria-pressed', String(on));
+    gasLabel.textContent = on ? 'GAS ●' : 'GAS';
+    gasHint.textContent = on ? 'bis zur Bremse' : 'antippen';
+  };
+  if (carry?.on) setGas(true);
+  const push = (force = false, edge?: { autoGas: boolean; reset?: boolean }) => {
     const now = performance.now();
-    const boolChanged = inp.gas !== last.gas || inp.brake !== last.brake || inp.drift !== last.drift;
+    if (!socket.connected || !root.isConnected || store.state?.miniSeq !== miniSeq) return;
+    const boolChanged = inp.autoGas !== last.autoGas || inp.brake !== last.brake || inp.drift !== last.drift;
     const steerChanged = Math.abs(inp.steer - last.steer) >= 0.03 && now - last.t >= 33;
     if (!force && !boolChanged && !steerChanged && now - last.t < 300) return;
-    last = { steer: inp.steer, gas: inp.gas, brake: inp.brake, drift: inp.drift, t: now };
-    send('steer', { x: inp.steer, gas: inp.gas, brake: inp.brake, drift: inp.drift });
+    last = { ...inp, t: now };
+    // Ein Keepalive bestätigt nur die Verbindung. Ausschließlich ein neuer Tipp
+    // darf Gas nach Verbindungsverlust oder abgelaufenem Server-Wächter einrasten.
+    const command = edge && { ...edge, gasSeq: ++gasCommandNumber };
+    if (command) lastGasSeq = command.gasSeq;
+    send('steer', { miniSeq, x: inp.steer, gas: false, brake: inp.brake, drift: inp.drift, ...command });
   };
 
   // Linke Hälfte: schwebender Stick bzw. Kipp-Lenkung
   const left = q(root, '.k3-left');
+  let releaseStick = () => {};
   if (mode === 'touch') {
     const stick = q(root, '.k3-stick');
     const knob = q(root, '.k3-knob');
@@ -188,15 +204,18 @@ function buildDrive(mode: 'tilt' | 'touch', rerender: () => void) {
       if (Math.abs(d) > FULL + 24) baseX = px - Math.sign(d) * (FULL + 24);
       push();
     });
-    const up = (e: PointerEvent) => {
-      if (e.pointerId !== active) return;
+    releaseStick = () => {
       active = null;
       inp.steer = 0;
       stick.classList.remove('on');
+    };
+    const up = (e: PointerEvent) => {
+      if (e.pointerId !== active) return;
+      releaseStick();
       push(true);
     };
     left.addEventListener('pointerup', up);
-    left.addEventListener('pointercancel', up);
+    left.addEventListener('lostpointercapture', up);
   } else {
     left.addEventListener('pointerdown', (e) => {
       e.preventDefault();
@@ -219,117 +238,122 @@ function buildDrive(mode: 'tilt' | 'touch', rerender: () => void) {
     void toggleTilt();
   });
   async function toggleTilt() {
-    if (mode === 'tilt') {
-      stopTilt();
-      rerender();
-    } else if (await startTilt()) {
+    if (mode === 'tilt') stopTilt();
+    else {
+      if (!(await startTilt())) return;
       toast('Handy wie ein Lenkrad drehen!');
-      rerender();
     }
+    if (!root.isConnected || !socket.connected || store.state?.miniSeq !== miniSeq) return;
+    steeringHandoff = { seq: miniSeq, on: !!inp.autoGas, gasSeq: lastGasSeq };
+    rerender();
   }
 
-  // Rechte Hälfte: GAS / BREMSE / DRIFT mit Rüberrutschen (jeder Finger aktiviert den Knopf, über dem er gerade ist)
-  const right = q(root, '.k3-right');
-  const btns: Record<Btn, HTMLElement> = { gas: q(root, '.k3-gas'), brake: q(root, '.k3-brake'), drift: q(root, '.k3-drift') };
-  let rects: { b: Btn; x: number; y: number; w: number; h: number }[] = [];
-  const measure = () => {
-    rects = (Object.keys(btns) as Btn[]).map((b) => {
-      const r = btns[b].getBoundingClientRect();
-      return { b, x: r.left, y: r.top, w: r.width, h: r.height };
-    });
-  };
-  const hit = (x: number, y: number): Btn | null => {
-    if (!rects.length) measure();
-    let best: Btn | null = null;
-    let bd = 18; // Toleranz: Lücken zwischen den Knöpfen zählen zum nächsten
-    for (const r of rects) {
-      const dx = Math.max(r.x - x, 0, x - (r.x + r.w));
-      const dy = Math.max(r.y - y, 0, y - (r.y + r.h));
-      const d = Math.hypot(dx, dy);
-      if (d < bd) {
-        bd = d;
-        best = r.b;
-      }
-    }
-    return best;
-  };
-  const fingers = new Map<number, Btn | null>();
-  const applyButtons = () => {
-    const down = new Set<Btn>();
-    for (const b of fingers.values()) if (b) down.add(b);
-    let changed = false;
-    for (const b of Object.keys(btns) as Btn[]) {
-      const on = down.has(b);
-      btns[b].classList.toggle('down', on);
-      if (inp[b] !== on) {
-        inp[b] = on;
-        changed = true;
-      }
-    }
-    if (changed) push(true);
-  };
-  right.addEventListener('pointerdown', (e) => {
-    e.preventDefault();
-    right.setPointerCapture(e.pointerId);
-    fingers.set(e.pointerId, hit(e.clientX, e.clientY));
-    applyButtons();
-  });
-  right.addEventListener('pointermove', (e) => {
-    if (!fingers.has(e.pointerId)) return;
-    const b = hit(e.clientX, e.clientY);
-    if (b !== fingers.get(e.pointerId)) {
-      fingers.set(e.pointerId, b);
-      applyButtons();
-    }
-  });
-  const release = (e: PointerEvent) => {
-    if (!fingers.delete(e.pointerId)) return;
-    applyButtons();
-  };
-  right.addEventListener('pointerup', release);
-  right.addEventListener('pointercancel', release);
-  // Handy gedreht / Ausrichtungs-Overlay eingeblendet: gehaltene Knöpfe und Lenkung loslassen
-  onInputReset(right, () => {
-    fingers.clear();
-    applyButtons();
-    if (inp.steer) {
-      inp.steer = 0;
-      push(true);
-    }
-  });
-  window.addEventListener('resize', measure);
-  /** Aufräumen, wenn der Screen ersetzt wurde (Fensterlistener) */
-  const cleanup: (() => void)[] = [() => window.removeEventListener('resize', measure)];
-
-  // Item
+  // Jeder Knopf reagiert nur auf den dort begonnenen Druck. Ein Finger kann über
+  // die Nachbartaste rutschen, ohne einen weiteren Befehl auszulösen.
+  const brakeBtn = q<HTMLButtonElement>(root, '.k3-brake');
+  const driftBtn = q<HTMLButtonElement>(root, '.k3-drift');
   const itemBtn = q<HTMLButtonElement>(root, '.k3-item');
-  itemBtn.addEventListener('pointerdown', (e) => {
-    e.preventDefault();
-    if (itemBtn.disabled) return;
-    send('item');
+  const held: Record<'brake' | 'drift', Set<number>> = { brake: new Set(), drift: new Set() };
+  const latchGas = () => {
+    if (inp.brake || inp.autoGas) return;
+    setGas(true);
+    push(true, { autoGas: true });
+    haptic('tap');
+  };
+  const useItem = () => {
+    if (itemBtn.disabled || !socket.connected || store.state?.miniSeq !== miniSeq) return;
+    send('item', { miniSeq });
     vibrate(25);
-  });
-
-  // Intro „So fährst du“ (3 s, einmal pro Rennen)
-  const intro = q(root, '.k3-intro');
-  if (st0.sub === 'countdown' && introFor !== store.endsAt) {
-    introFor = store.endsAt;
-    intro.classList.remove('hidden');
-    rootEl.classList.add('introing');
-    const hide = () => {
-      intro.classList.add('hidden');
-      rootEl.classList.remove('introing');
-    };
-    intro.addEventListener('pointerdown', (e) => {
+  };
+  for (const [button, tap] of [[gasBtn, latchGas], [itemBtn, useItem]] as const) {
+    button.addEventListener('pointerdown', (e) => {
       e.preventDefault();
-      hide();
+      tap();
     });
-    setTimeout(hide, 3200);
+    // Tastatur bzw. Aktivierung über eine Bedienungshilfe.
+    button.addEventListener('click', (e) => { if (e.detail === 0) tap(); });
   }
+  for (const [action, button] of [['brake', brakeBtn], ['drift', driftBtn]] as const) {
+    const press = (id: number) => {
+      if (action === 'drift' && inp.brake) return;
+      if (action === 'brake') {
+        setGas(false);
+        held.drift.clear();
+        inp.drift = false;
+        const own = world.ownPhys;
+        if (own) {
+          own.driftDir = 0;
+          own.driftCharge = 0;
+          own.boostMs = 0;
+        }
+        driftBtn.classList.remove('down');
+      }
+      held[action].add(id);
+      inp[action] = true;
+      button.classList.add('down');
+      push(true, action === 'brake' ? { autoGas: false } : undefined);
+    };
+    const release = (id: number) => {
+      if (!held[action].delete(id) || held[action].size > 0) return;
+      inp[action] = false;
+      button.classList.remove('down');
+      push(true);
+    };
+    button.addEventListener('pointerdown', (e) => {
+      e.preventDefault();
+      button.setPointerCapture(e.pointerId);
+      press(e.pointerId);
+    });
+    button.addEventListener('pointerup', (e) => release(e.pointerId));
+    button.addEventListener('lostpointercapture', (e) => release(e.pointerId));
+    button.addEventListener('keydown', (e) => {
+      if (e.key !== ' ' && e.key !== 'Enter') return;
+      e.preventDefault();
+      if (!e.repeat) press(-1);
+    });
+    button.addEventListener('keyup', (e) => {
+      if (e.key === ' ' || e.key === 'Enter') release(-1);
+    });
+    button.addEventListener('blur', () => release(-1));
+  }
+
+  const releaseHeld = () => {
+    releaseStick();
+    held.brake.clear();
+    held.drift.clear();
+    inp.steer = 0;
+    inp.brake = inp.drift = false;
+    // Eine unterbrochene Geste darf in der Vorhersage keinen Mini-Turbo auslösen.
+    const own = world.ownPhys;
+    if (own) {
+      own.driftDir = 0;
+      own.driftCharge = 0;
+    }
+    brakeBtn.classList.remove('down');
+    driftBtn.classList.remove('down');
+  };
+  const resetInputs = () => {
+    steeringHandoff = null;
+    releaseHeld();
+    setGas(false);
+    push(true, { autoGas: false, reset: true });
+  };
+  // Beim Lenkmodus-Wechsel lediglich die zuvor gehaltenen Pedale und den Stick lösen.
+  push(true, carry ? undefined : { autoGas: false });
+  const onHide = () => { if (document.hidden) resetInputs(); };
+  rootEl.addEventListener('pointercancel', resetInputs);
+  window.addEventListener('input-reset', resetInputs);
+  window.addEventListener('blur', resetInputs);
+  document.addEventListener('visibilitychange', onHide);
+  socket.on('disconnect', resetInputs);
+  const cleanup: (() => void)[] = [() => {
+    window.removeEventListener('input-reset', resetInputs);
+    window.removeEventListener('blur', resetInputs);
+    document.removeEventListener('visibilitychange', onHide);
+    socket.off('disconnect', resetInputs);
+  }];
 
   // ---- Ansicht am Handy: Mode-7-Renderer + Vorhersage (die Vorhersage läuft immer – auch für Haptik/Drift-Anzeige)
-  const world = new KartWorld(st0.track, store.playerId!);
-  world.onSnapshot(st0);
   let renderer: Mode7Renderer | null = null;
   let camA = st0.karts[store.playerId!]?.angle ?? 0;
   let lastFrame = performance.now();
@@ -431,7 +455,7 @@ function buildDrive(mode: 'tilt' | 'touch', rerender: () => void) {
     const dt = Math.min(50, now - lastFrame);
     lastFrame = now;
     const st = store.state?.mini?.kind === 'kart' ? store.state.mini.state : null;
-    if (!st) return;
+    if (!st || store.state?.miniSeq !== miniSeq || !socket.connected || document.hidden) return;
     if (st.t !== lastSnapT) {
       lastSnapT = st.t;
       world.onSnapshot(st);
@@ -447,6 +471,9 @@ function buildDrive(mode: 'tilt' | 'touch', rerender: () => void) {
       const lbl = tiltLabel(tilt.roll, tilt.center);
       if (degEl && degEl.textContent !== lbl) degEl.textContent = lbl;
     }
+    // Unterbrochene Haltegesten nicht erneut senden. Ob das Dauergas noch gilt,
+    // meldet der Server mit der Nummer des letzten Gasbefehls zurück.
+    if (now - last.t >= HOLD_TIMEOUT_MS && (inp.brake || inp.drift || inp.steer)) releaseHeld();
     push();
     // Vorhersage + Haptik
     const fired = world.predict(inp, dt);
@@ -460,6 +487,7 @@ function buildDrive(mode: 'tilt' | 'touch', rerender: () => void) {
     }
     if (fired) {
       vibrate(30);
+      lessonDone = true;
       flash('TURBO!', 'turbo', 600);
     }
     if (!renderer) return;
@@ -477,11 +505,16 @@ function buildDrive(mode: 'tilt' | 'touch', rerender: () => void) {
   // ---- HUD (wird bei jedem Server-Stand und alle 250 ms aufgerufen)
   const icon = q<HTMLCanvasElement>(root, '.k3-item canvas');
   let shownItem: string | undefined;
+  const lesson = root.querySelector<HTMLElement>('.k3-lesson');
+  let lessonDone = false;
   let lastSub = '';
   return () => {
     const st = store.state?.mini?.kind === 'kart' ? store.state.mini.state : null;
     const c = st?.karts[store.playerId!];
     if (!st || !c) return;
+    // Nur eine Rückmeldung zum jüngsten Befehl darf den lokalen Gaswunsch lösen.
+    // So bleibt ein neuer Tipp auch hinter verspäteten Gas-/Brems-Ständen erhalten.
+    if (inp.autoGas && c.gasSeq === lastGasSeq && !c.autoGas) setGas(false);
     const n = Object.keys(st.karts).length;
     setPhoneView(effectiveView(st));
     // Umschalter nur, wenn es TV-Splitscreen gibt (≤ 4 Spieler); sonst einmal kurz der Hinweis im Countdown
@@ -512,8 +545,8 @@ function buildDrive(mode: 'tilt' | 'touch', rerender: () => void) {
     const now = performance.now();
     if (st.sub === 'countdown') {
       const s = secondsLeft();
-      center.textContent = s > 3 ? `${KART_TRACKS[st.track]?.name ?? ''} · ${st.laps} Runden` : String(Math.max(1, s));
-      center.className = `k3-center ${s > 3 ? 'small' : 'count'}`;
+      center.textContent = String(Math.max(1, Math.min(KART.COUNTDOWN_MS / 1000, s)));
+      center.className = 'k3-center count';
     } else if (lastSub === 'countdown') {
       flash('LOS!', 'go', 800);
     } else if (centerUntil && now > centerUntil) {
@@ -528,7 +561,7 @@ function buildDrive(mode: 'tilt' | 'touch', rerender: () => void) {
       st.sub === 'countdown'
         ? mode === 'tilt'
           ? 'Handy gerade halten – links tippen setzt die Mitte'
-          : 'Gleich geht’s los – GAS gedrückt halten!'
+          : 'GAS antippen zum Start'
         : c.spin > 0
           ? 'Uiii – du drehst dich!'
           : charged
@@ -540,6 +573,14 @@ function buildDrive(mode: 'tilt' | 'touch', rerender: () => void) {
                 : st.closing
                   ? `Noch ${Math.ceil(st.endsIn / 1000)}s!`
                   : '';
+    if (lesson) {
+      const step = lessonDone ? '' : !inp.autoGas ? 'gas' : charged ? 'turbo' : 'drift';
+      if (rootEl.dataset.lesson !== step) {
+        rootEl.dataset.lesson = step;
+        lesson.hidden = !step;
+        lesson.textContent = step === 'gas' ? 'GAS antippen · fährt von allein' : step === 'drift' ? 'In der Kurve DRIFT halten' : 'DRIFT loslassen · Mini-Turbo!';
+      }
+    }
     q(root, '.k3-msg').textContent = msg;
     rootEl.classList.toggle('charged', charged);
     rootEl.classList.toggle('drifting', drifting);
