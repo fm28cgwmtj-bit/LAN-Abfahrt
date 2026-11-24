@@ -10,6 +10,9 @@ Lokales Party-Spiel: TV-Ansicht (Phaser) + Handys als Controller (Browser), verb
 - `npm run online` – Build + Server + Cloudflare-Quick-Tunnel (`server/online.ts`), Freunde spielen über `https://….trycloudflare.com` mit; feste Adresse per `ONLINE_URL`
 - `npm run bots -- 4 --game=murder` – Testspieler; `--party` für eine komplette Party (zum Testen neuer Features immer einmal durchlaufen lassen)
 - `npm run test:records` – Tests ohne Browser für die ewigen Bestleistungen der Board-Spiele (`server/records.ts`)
+- `npm test` – alle Testsuiten, einschließlich zwölf Kart-Controllern und drei Wiederverbindungen auf localhost
+- `npm run test:vip` – VIP-Übergabe in Lobby und Minispiel mit echten Socket.IO-Clients
+- `npm run test:koffer` – Brett-Kurzform und Arcade-Packzeit
 - `npm run test:kart` – prüft Gas, Bremse, Drift und den Übergang von der Aufwärmrunde ins Rennen
 - `npm run test:lieder` – Tests ohne Browser für Guess the Song (Genres/Runden, Dateien → Genre, Deezer-Trefferwahl, kompletter Rundenablauf)
 - `npm run test:wolfrunde` – Tests ohne Browser für Werwolf mit Erzähler (Stapel-Regeln, Geheimhaltung: TV ohne Karten, jeder nur seine, Erzähler alle; Dieb, Totenkopf, Ergebnis)

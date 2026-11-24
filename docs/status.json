@@ -1,11 +1,39 @@
 {
-  "updated": "2026-11-24T15:50+00:00",
+  "updated": "2026-11-24T14:34+00:00",
   "artifact": "https://claude.ai/artifact/8XRwB1H3bsUUTV5g9dAtmi (slug 3cefa65c-7b4d-4434-a343-b15cb2c458b5)",
   "analysis": {
     "title": "Spiel-Review (Tiefenanalyse, 5.11.)",
     "url": "https://claude.ai/artifact/76ucbosiWoyLfWBYx2VBK1"
   },
   "inProgress": [
+    {
+      "type": "Spieltest im Fork",
+      "kind": "turm",
+      "title": "Drei Kurzformen fürs Spielbrett",
+      "detail": "Wackelturm wertet die Turmhöhe nach bis zu 90 Sekunden, Kofferpacken die Ladung nach bis zu 60 Sekunden. Minigolf spielt drei Bahnen.",
+      "branch": "codex/spieltest"
+    },
+    {
+      "type": "Spieltest im Fork",
+      "kind": null,
+      "title": "VIP-Wechsel am Laptop",
+      "detail": "Im Spielerpanel lässt sich die Leitung auch im laufenden Spiel an ein verbundenes Handy übergeben.",
+      "branch": "codex/spieltest"
+    },
+    {
+      "type": "Spieltest im Fork",
+      "kind": null,
+      "title": "Zoomschutz für Handy-Controller",
+      "detail": "Spielgesten, scrollbare Antworten und Texteingaben mit Zoomhilfe sind im Browser getestet. Der Test auf physischen Handys steht aus.",
+      "branch": "codex/spieltest"
+    },
+    {
+      "type": "Spieltest im Fork",
+      "kind": "kart",
+      "title": "Netztest mit zwölf Kart-Controllern",
+      "detail": "Lokaler Test mit 2, 10 und 60 Sekunden Verbindungsunterbrechung, Wiederbeitritt und gemeinsamer Ergebnisliste.",
+      "branch": "codex/spieltest"
+    },
     {
       "type": "Spieltest im Fork",
       "kind": "kart",

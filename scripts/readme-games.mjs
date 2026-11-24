@@ -71,7 +71,7 @@ for (const s of sections) {
 }
 const table = [
   '<!-- games:start -->',
-  `_Automatisch aus \`shared/games.ts\` erzeugt (\`node scripts/readme-games.mjs\`) – ${Object.keys(info).length} Spiele. Handy: ↔ = quer halten (Stick + Knöpfe), ↕ = hochkant (Sensor, Listen, Text). Dauer bei 8–12 Spielern: kurz ≤ 2 min, mittel ≤ 4 min, lang > 4 min (\`MINI_LENGTH\`). Brett: ✓ = kommt im Party-Modus nach einer Brett-Runde dran (lange nur mit „Lange Spiele“), Finale = Finalspiel, – = nur einzeln/Arcade._`,
+  `_Automatisch aus \`shared/games.ts\` erzeugt (\`node scripts/readme-games.mjs\`) – ${Object.keys(info).length} Spiele. Handy: ↔ = quer halten (Stick + Knöpfe), ↕ = hochkant (Sensor, Listen, Text). Dauer im Einzelspiel bei 8–12 Spielern: kurz ≤ 2 min, mittel ≤ 4 min, lang > 4 min (\`MINI_LENGTH\`). Brett: ✓ = kommt im Party-Modus nach einer Brett-Runde dran (Brett-Kurzformen sind im Standardpool, lange Brettspiele mit „Lange Spiele“), Finale = Finalspiel, – = nur einzeln/Arcade._`,
   '',
   '| Spiel | Vorbild | Spieler | Handy | Dauer | Brett |',
   '|---|---|---|---|---|---|',
